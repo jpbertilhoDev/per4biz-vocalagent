@@ -1,0 +1,48 @@
+{
+  "name": "Per4Biz",
+  "short_name": "Per4Biz",
+  "description": "Copiloto vocal de email e agenda — multi-conta Google",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A84FF",
+  "theme_color": "#0A84FF",
+  "lang": "pt-PT",
+  "dir": "ltr",
+  "categories": ["productivity", "business", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo email por voz",
+      "short_name": "Ditar",
+      "url": "/voice?intent=compose",
+      "description": "Começar composer vocal"
+    },
+    {
+      "name": "Ler inbox",
+      "short_name": "Inbox",
+      "url": "/inbox",
+      "description": "Ver emails recebidos"
+    }
+  ]
+}

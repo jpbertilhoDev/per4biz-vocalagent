@@ -1,0 +1,103 @@
+[project]
+name = "per4biz-backend"
+version = "0.1.0"
+description = "Per4Biz — FastAPI backend (single-tenant V1)"
+requires-python = ">=3.12"
+readme = "README.md"
+license = { text = "Proprietary" }
+authors = [{ name = "JP Bertilho", email = "jpbertilhopt@gmail.com" }]
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic[email]>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "httpx>=0.27.2",
+    "google-api-python-client>=2.150.0",
+    "google-auth>=2.35.0",
+    "google-auth-oauthlib>=1.2.1",
+    "google-auth-httplib2>=0.2.0",
+    "groq>=0.13.0",
+    "elevenlabs>=1.8.0",
+    "supabase>=2.10.0",
+    "cryptography>=44.0.0",
+    "python-multipart>=0.0.17",
+    "python-jose[cryptography]>=3.3.0",
+    "orjson>=3.10.11",
+    "structlog>=24.4.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-python-jose>=3.3.4",
+    "httpx>=0.27.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "PIE", "SIM", "RET", "ARG", "PTH"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ARG", "B"]
+# `app/logging.py` é intencionalmente chamado assim — é o módulo central de
+# structured logging do projecto. O shadow sobre `logging` stdlib é feito de
+# forma explícita e documentada (usamos `from app.logging import get_logger`
+# em todo o app, nunca `import logging` directo).
+"app/logging.py" = ["A005"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = false
+
+# `google-api-python-client` (módulo `googleapiclient`) e `google-auth` não
+# distribuem `py.typed` — ignoramos missing stubs apenas para esses pacotes
+# específicos; o restante do código continua em strict mode.
+[[tool.mypy.overrides]]
+module = [
+    "googleapiclient.*",
+    "google.auth.*",
+    "google.oauth2.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "integration: integration tests requiring external services",
+    "slow: slow tests (> 1s)",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

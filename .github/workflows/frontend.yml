@@ -1,0 +1,42 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "clientes/Per4Biz/frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "clientes/Per4Biz/frontend/**"
+      - ".github/workflows/frontend.yml"
+
+defaults:
+  run:
+    working-directory: clientes/Per4Biz/frontend
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: clientes/Per4Biz/frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:run
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_APP_URL: https://per4biz.vercel.app
+          NEXT_PUBLIC_API_URL: https://per4biz-api.fly.dev

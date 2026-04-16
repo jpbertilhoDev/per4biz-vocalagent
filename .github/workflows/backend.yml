@@ -1,0 +1,48 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "clientes/Per4Biz/backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "clientes/Per4Biz/backend/**"
+      - ".github/workflows/backend.yml"
+
+defaults:
+  run:
+    working-directory: clientes/Per4Biz/backend
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.6"
+          enable-cache: true
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Install deps
+        run: uv sync --frozen --all-extras
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+
+      - name: Typecheck (mypy)
+        run: uv run mypy app
+
+      - name: Tests
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=70
