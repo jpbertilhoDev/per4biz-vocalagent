@@ -14,10 +14,10 @@ RefreshError handling: cleans up google_accounts + clears session cookie
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException, Query
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 from pydantic import BaseModel, Field
@@ -26,6 +26,7 @@ from app.deps import current_user
 from app.logging import get_logger
 from app.services import calendar
 from app.services.auth_helpers import invalid_grant_response
+from app.services.date_parser import parse_pt_datetime
 
 logger = get_logger(__name__)
 
@@ -82,7 +83,10 @@ def _handle_google_http_error(exc: HttpError, operation: str) -> None:
 class CreateEventRequest(BaseModel):
     summary: str = Field(..., min_length=1, max_length=500)
     start: str = Field(..., min_length=1)
-    end: str = Field(..., min_length=1)
+    # `end` is optional at API-layer: when empty/omitted or unparseable, the
+    # handler falls back to `start + 1h`. This makes the endpoint robust to
+    # LLM output that forgets to emit an end time.
+    end: str = ""
     description: str = ""
     location: str = ""
 
@@ -186,13 +190,32 @@ def create_calendar_event(
     req: CreateEventRequest,
     user: dict[str, Any] = _CurrentUser,
 ) -> Any:
-    """Create a new calendar event."""
+    """Create a new calendar event.
+
+    Safety net: normalize PT natural-language dates ("amanhã às 10h",
+    "próxima quinta") to ISO 8601 before forwarding to Google. The LLM
+    upstream sometimes drifts and sends raw PT strings.
+    """
+    start_parsed = parse_pt_datetime(req.start)
+    if start_parsed is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"invalid_start_date: {req.start!r}",
+        )
+    end_parsed = parse_pt_datetime(req.end) if req.end else None
+    if end_parsed is None:
+        # Fallback: end = start + 1h (default meeting length)
+        end_parsed = start_parsed + timedelta(hours=1)
+
+    start_iso = start_parsed.isoformat()
+    end_iso = end_parsed.isoformat()
+
     try:
         result = calendar.create_event(
             user["sub"],
             summary=req.summary,
-            start=req.start,
-            end=req.end,
+            start=start_iso,
+            end=end_iso,
             description=req.description,
             location=req.location,
         )
@@ -223,9 +246,21 @@ def update_calendar_event(
     if req.summary is not None:
         fields["summary"] = req.summary
     if req.start is not None:
-        fields["start"] = req.start
+        start_parsed = parse_pt_datetime(req.start)
+        if start_parsed is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid_start_date: {req.start!r}",
+            )
+        fields["start"] = start_parsed.isoformat()
     if req.end is not None:
-        fields["end"] = req.end
+        end_parsed = parse_pt_datetime(req.end)
+        if end_parsed is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid_end_date: {req.end!r}",
+            )
+        fields["end"] = end_parsed.isoformat()
     if req.description is not None:
         fields["description"] = req.description
     if req.location is not None:
