@@ -65,7 +65,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 value=renewed,
                 httponly=True,
                 secure=True,
-                samesite="lax",
+                samesite="none",
                 path="/",
                 max_age=_MAX_AGE_SECONDS,
             )

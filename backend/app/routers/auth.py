@@ -180,7 +180,7 @@ def callback(
         max_age=_SESSION_MAX_AGE_SECONDS,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         path="/",
     )
     return response

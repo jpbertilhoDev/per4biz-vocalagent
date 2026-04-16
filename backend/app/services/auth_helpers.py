@@ -42,7 +42,7 @@ def invalid_grant_response(user_sub: str) -> Response:
         path="/",
         secure=True,
         httponly=True,
-        samesite="lax",
+        samesite="none",
     )
     logger.info("invalid_grant.cleanup_done")
     return response

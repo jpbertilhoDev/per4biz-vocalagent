@@ -173,7 +173,7 @@ def delete_me(
         path="/",
         secure=True,
         httponly=True,
-        samesite="lax",
+        samesite="none",
     )
 
     logger.info("me.delete.success")
