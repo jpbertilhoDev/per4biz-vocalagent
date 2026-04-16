@@ -22,9 +22,13 @@ import {
   getEmail,
   listCalendarEvents,
   createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
   searchContacts,
   type EmailListResponse,
   type EmailDetail,
+  type CreateEventPayload,
+  type UpdateEventPayload,
 } from "@/lib/queries";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -70,6 +74,23 @@ export default function ChatPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const lastEmailRef = useRef<{ fromName: string; fromEmail: string; subject: string; body: string; id: string } | null>(null);
+  const lastCalendarEventRef = useRef<{
+    id: string;
+    summary: string;
+    start: string; // ISO
+    end: string; // ISO
+    location?: string;
+  } | null>(null);
+  // Pending calendar actions awaiting user Sim/Não confirmation.
+  // Keyed by a uuid attached to the confirmation card's meta.pendingId.
+  const pendingActionsRef = useRef<
+    Map<
+      string,
+      | { type: "create"; payload: CreateEventPayload }
+      | { type: "edit"; eventId: string; summary: string; changes: UpdateEventPayload }
+      | { type: "delete"; eventId: string; summary: string }
+    >
+  >(new Map());
 
   const { data: emailData } = useQuery<EmailListResponse>({
     queryKey: emailsKeys.list(),
@@ -314,6 +335,15 @@ export default function ChatPage() {
               },
             });
           }
+          // Track the first listed event so "cancela essa" / "muda essa" resolves without LLM id.
+          const first = events[0];
+          lastCalendarEventRef.current = {
+            id: first.id,
+            summary: first.summary,
+            start: first.start,
+            end: first.end,
+            location: first.location || undefined,
+          };
           const voiceSummary = events.slice(0, 5).map((e) => `${e.summary} ${e.is_all_day ? "todo o dia" : `às ${new Date(e.start).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`}`).join(". ");
           await playTTS(`Tens ${events.length} evento${events.length > 1 ? "s" : ""}. ${voiceSummary}`);
         }
@@ -348,60 +378,148 @@ export default function ChatPage() {
         }
       }
     } else if (intent === "calendar_create") {
-      const { summary, start, end } = intentResult.params as { summary?: string; start?: string; end?: string };
+      const { summary, start, end, location } = intentResult.params as {
+        summary?: string;
+        start?: string;
+        end?: string;
+        location?: string;
+      };
       if (!summary) {
         addVoxCard({ type: "transcription", title: "Criar evento", content: "Qual é o título do evento que queres criar?" });
         await playTTS("Qual é o título do evento que queres criar?");
         return;
       }
-      try {
-        const now = new Date();
-        const defaultStart = start ?? new Date(now.getTime() + 3600000).toISOString();
-        const defaultEnd = end ?? new Date(now.getTime() + 7200000).toISOString();
-        const created = await createCalendarEvent({ summary, start: defaultStart, end: defaultEnd });
-        addVoxCard({
-          type: "calendar-create",
-          title: "Evento criado",
-          content: `"${created.summary}" criado com sucesso.`,
-          meta: {
-            Título: created.summary,
-            Início: new Date(created.start).toLocaleString("pt-PT"),
-            Fim: new Date(created.end).toLocaleString("pt-PT"),
-          },
-        });
-        await playTTS(`Evento "${created.summary}" criado com sucesso.`);
-      } catch (err) {
-        if (err instanceof ApiError) {
-          if (err.detail === "calendar_scope_missing") {
-            addVoxCard({
-              type: "error",
-              title: "Permissão em falta",
-              content: "Falta o scope do Calendar. Volta a autorizar.",
-              actions: [{ label: "Autorizar agenda", action: "reauth" }],
-            });
-            await playTTS("Falta-me permissão para criar eventos.");
-          } else if (err.detail === "calendar_api_not_enabled") {
-            addVoxCard({
-              type: "error",
-              title: "Calendar API desativada",
-              content: "Ativa a Google Calendar API no Google Cloud Console.",
-            });
-            await playTTS("A Calendar API não está ativada.");
-          } else {
-            addVoxCard({ type: "error", title: `Erro ${err.status}`, content: err.detail });
-            await playTTS("Não consegui criar o evento.");
-          }
-        } else {
-          addVoxCard({ type: "error", title: "Erro", content: "Não consegui criar o evento." });
-          await playTTS("Não consegui criar o evento.");
-        }
-      }
+      const now = new Date();
+      const finalStart = start ?? new Date(now.getTime() + 3600000).toISOString();
+      const finalEnd = end ?? new Date(new Date(finalStart).getTime() + 3600000).toISOString();
+      const payload: CreateEventPayload = {
+        summary,
+        start: finalStart,
+        end: finalEnd,
+        ...(location ? { location } : {}),
+      };
+
+      const pendingId = crypto.randomUUID();
+      pendingActionsRef.current.set(pendingId, { type: "create", payload });
+
+      const whenStr = `${new Date(finalStart).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" })}, ${new Date(finalStart).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}–${new Date(finalEnd).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`;
+      addVoxCard({
+        type: "calendar-confirm",
+        title: "Criar evento?",
+        content: [summary, whenStr, location].filter(Boolean).join("\n"),
+        meta: {
+          Título: summary,
+          Quando: whenStr,
+          ...(location ? { Onde: location } : {}),
+          pendingId,
+        },
+        actions: [
+          { label: "Cancelar", action: "calendar-cancel" },
+          { label: "Sim, criar", action: "calendar-create-confirm" },
+        ],
+      });
+      await playTTS(`Queres que marque ${summary}?`);
     } else if (intent === "calendar_edit") {
-      addVoxCard({ type: "transcription", title: "Editar evento", content: "Para editar um evento, abre a tab Agenda e faz as alterações lá." });
-      await playTTS("Para editar um evento, abre a aba Agenda e faz as alterações lá.");
+      const target = lastCalendarEventRef.current;
+      if (!target) {
+        addVoxCard({
+          type: "error",
+          title: "Qual evento?",
+          content: "Não sei a que evento te referes. Pede-me primeiro a agenda, ou diz o nome do evento.",
+        });
+        await playTTS("Qual evento queres editar?");
+        return;
+      }
+
+      const params = intentResult.params as {
+        summary?: string;
+        start?: string;
+        end?: string;
+        location?: string;
+      };
+      const changes: UpdateEventPayload = {};
+      if (params.summary) changes.summary = params.summary;
+      if (params.start) changes.start = params.start;
+      if (params.end) changes.end = params.end;
+      if (params.location) changes.location = params.location;
+
+      if (Object.keys(changes).length === 0) {
+        addVoxCard({
+          type: "error",
+          title: "O que queres mudar?",
+          content: `No evento "${target.summary}" — indica-me o que queres alterar (hora, data, título, local).`,
+        });
+        await playTTS(`O que queres mudar no evento ${target.summary}?`);
+        return;
+      }
+
+      const pendingId = crypto.randomUUID();
+      pendingActionsRef.current.set(pendingId, {
+        type: "edit",
+        eventId: target.id,
+        summary: target.summary,
+        changes,
+      });
+
+      const previewMeta: Record<string, string> = { Evento: target.summary };
+      if (changes.summary) previewMeta["Novo título"] = changes.summary;
+      if (changes.start) {
+        const newStart = new Date(changes.start);
+        const newEnd = changes.end ? new Date(changes.end) : null;
+        previewMeta["Nova hora"] = newEnd
+          ? `${newStart.toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" })}, ${newStart.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}–${newEnd.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`
+          : `${newStart.toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" })}, ${newStart.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`;
+      }
+      if (changes.location) previewMeta["Novo local"] = changes.location;
+      previewMeta.pendingId = pendingId;
+
+      addVoxCard({
+        type: "calendar-confirm",
+        title: `Alterar "${target.summary}"?`,
+        content: "Confirmas as alterações abaixo?",
+        meta: previewMeta,
+        actions: [
+          { label: "Cancelar", action: "calendar-cancel" },
+          { label: "Sim, alterar", action: "calendar-edit-confirm" },
+        ],
+      });
+      await playTTS(`Confirmas as alterações ao evento ${target.summary}?`);
     } else if (intent === "calendar_delete") {
-      addVoxCard({ type: "transcription", title: "Apagar evento", content: "Para apagar um evento, abre a tab Agenda e remove-o lá." });
-      await playTTS("Para apagar um evento, abre a aba Agenda e remove-o lá.");
+      const target = lastCalendarEventRef.current;
+      if (!target) {
+        addVoxCard({
+          type: "error",
+          title: "Qual evento?",
+          content: "Não sei a que evento te referes. Pede-me primeiro a agenda, ou diz o nome do evento a apagar.",
+        });
+        await playTTS("Qual evento queres apagar?");
+        return;
+      }
+
+      const pendingId = crypto.randomUUID();
+      pendingActionsRef.current.set(pendingId, {
+        type: "delete",
+        eventId: target.id,
+        summary: target.summary,
+      });
+
+      const whenStr = `${new Date(target.start).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" })}, ${new Date(target.start).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`;
+      addVoxCard({
+        type: "calendar-confirm",
+        title: `Apagar "${target.summary}"?`,
+        content: "Esta ação não pode ser desfeita.",
+        meta: {
+          Evento: target.summary,
+          Quando: whenStr,
+          ...(target.location ? { Onde: target.location } : {}),
+          pendingId,
+        },
+        actions: [
+          { label: "Cancelar", action: "calendar-cancel" },
+          { label: "Sim, apagar", action: "calendar-delete-confirm" },
+        ],
+      });
+      await playTTS(`Confirmas que apago ${target.summary}?`);
     } else if (intent === "contacts_search") {
       const query = String(intentResult.params.query ?? transcript);
       try {
@@ -591,6 +709,118 @@ export default function ChatPage() {
       if (typeof window !== "undefined") {
         window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/auth/google/start`;
       }
+    }
+
+    // -----------------------------------------------------------------------
+    // Calendar CRUD confirmations — preview → Sim → execute
+    // -----------------------------------------------------------------------
+    const pendingId = card?.meta?.pendingId;
+    const pending = pendingId ? pendingActionsRef.current.get(pendingId) : undefined;
+
+    if (action === "calendar-cancel" && pendingId) {
+      pendingActionsRef.current.delete(pendingId);
+      addVoxCard({ type: "transcription", title: "Cancelado", content: "Ok, não fiz nada." });
+      playTTS("Ok, cancelei.").catch(() => {});
+    }
+
+    if (action === "calendar-create-confirm" && pending?.type === "create") {
+      const payload = pending.payload;
+      pendingActionsRef.current.delete(pendingId!);
+      createCalendarEvent(payload)
+        .then(async (created) => {
+          lastCalendarEventRef.current = {
+            id: created.id,
+            summary: created.summary,
+            start: created.start,
+            end: created.end,
+            location: created.location || undefined,
+          };
+          addVoxCard({
+            type: "calendar-create",
+            title: "Evento criado",
+            content: `"${created.summary}" marcado.`,
+            meta: {
+              Título: created.summary,
+              Início: new Date(created.start).toLocaleString("pt-PT"),
+              Fim: new Date(created.end).toLocaleString("pt-PT"),
+            },
+          });
+          await playTTS("Marcado.");
+        })
+        .catch(async (err) => {
+          if (err instanceof ApiError && err.detail === "calendar_scope_missing") {
+            addVoxCard({
+              type: "error",
+              title: "Permissão em falta",
+              content: "Falta o scope do Calendar. Volta a autorizar.",
+              actions: [{ label: "Autorizar agenda", action: "reauth" }],
+            });
+            await playTTS("Falta-me permissão para criar eventos.");
+          } else {
+            addVoxCard({ type: "error", title: "Erro", content: "Não consegui marcar. Tenta novamente." });
+            await playTTS("Não consegui marcar.");
+          }
+        });
+    }
+
+    if (action === "calendar-edit-confirm" && pending?.type === "edit") {
+      const { eventId, changes, summary } = pending;
+      pendingActionsRef.current.delete(pendingId!);
+      updateCalendarEvent(eventId, changes)
+        .then(async (updated) => {
+          lastCalendarEventRef.current = {
+            id: updated.id,
+            summary: updated.summary,
+            start: updated.start,
+            end: updated.end,
+            location: updated.location || undefined,
+          };
+          addVoxCard({
+            type: "calendar-create",
+            title: "Evento alterado",
+            content: `"${updated.summary}" atualizado.`,
+            meta: {
+              Título: updated.summary,
+              Início: new Date(updated.start).toLocaleString("pt-PT"),
+              Fim: new Date(updated.end).toLocaleString("pt-PT"),
+            },
+          });
+          await playTTS("Alterado.");
+        })
+        .catch(async () => {
+          addVoxCard({
+            type: "error",
+            title: "Erro",
+            content: `Não consegui alterar "${summary}". Tenta novamente.`,
+          });
+          await playTTS("Não consegui alterar.");
+        });
+    }
+
+    if (action === "calendar-delete-confirm" && pending?.type === "delete") {
+      const { eventId, summary } = pending;
+      pendingActionsRef.current.delete(pendingId!);
+      deleteCalendarEvent(eventId)
+        .then(async () => {
+          // Clear context — the tracked event no longer exists.
+          if (lastCalendarEventRef.current?.id === eventId) {
+            lastCalendarEventRef.current = null;
+          }
+          addVoxCard({
+            type: "confirmation",
+            title: "Evento apagado",
+            content: `"${summary}" foi removido da agenda.`,
+          });
+          await playTTS("Apagado.");
+        })
+        .catch(async () => {
+          addVoxCard({
+            type: "error",
+            title: "Erro",
+            content: `Não consegui apagar "${summary}". Tenta novamente.`,
+          });
+          await playTTS("Não consegui apagar.");
+        });
     }
   }, [emailData?.emails, messages, addVoxCard, updateVoxCard, playTTS, setMicState, recorder, handleReadEmails, handleReplyToEmail]);
 

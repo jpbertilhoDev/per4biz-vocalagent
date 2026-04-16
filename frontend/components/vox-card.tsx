@@ -9,6 +9,7 @@ import {
   Calendar,
   Users,
   CalendarPlus,
+  CalendarCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VoxCard as VoxCardType, VoxCardType as CardType } from "@/lib/chat-store";
@@ -23,6 +24,7 @@ const typeConfig: Record<CardType, { icon: React.ElementType; accent: string; la
   "agenda-placeholder": { icon: Calendar, accent: "text-primary", label: "Vox" },
   "calendar-event": { icon: Calendar, accent: "text-primary", label: "Agenda" },
   "calendar-create": { icon: CalendarPlus, accent: "text-success", label: "Criado" },
+  "calendar-confirm": { icon: CalendarCheck, accent: "text-voice", label: "Confirmar" },
   "contact-card": { icon: Users, accent: "text-primary", label: "Contacto" },
 };
 
@@ -46,6 +48,7 @@ export function VoxCard({ card, onAction }: VoxCardProps) {
         card.type === "draft" && "border-primary/20",
         card.type === "calendar-event" && "border-primary/20",
         card.type === "calendar-create" && "border-success/30",
+        card.type === "calendar-confirm" && "border-voice/30",
         card.type === "contact-card" && "border-primary/20",
       )}
       role="article"
@@ -63,6 +66,7 @@ export function VoxCard({ card, onAction }: VoxCardProps) {
             card.type === "agenda-placeholder" && "bg-primary/15",
             card.type === "calendar-event" && "bg-primary/15",
             card.type === "calendar-create" && "bg-success/15",
+            card.type === "calendar-confirm" && "bg-voice/15",
             card.type === "contact-card" && "bg-primary/15",
           )}
         >
@@ -105,7 +109,11 @@ export function VoxCard({ card, onAction }: VoxCardProps) {
               key={action.action}
               size="sm"
               variant={
-                i === card.actions!.length - 1 && (action.action === "send" || action.action === "confirm")
+                action.action === "send" ||
+                action.action === "confirm" ||
+                action.action === "calendar-create-confirm" ||
+                action.action === "calendar-edit-confirm" ||
+                action.action === "calendar-delete-confirm"
                   ? "default"
                   : "ghost"
               }

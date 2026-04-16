@@ -12,6 +12,7 @@ export type VoxCardType =
   | "agenda-placeholder"
   | "calendar-event"
   | "calendar-create"
+  | "calendar-confirm"
   | "contact-card";
 
 export interface VoxCard {

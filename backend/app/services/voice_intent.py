@@ -37,8 +37,10 @@ Intenções possíveis:
 - "calendar_list" — quer ver agenda. Params: {{"days": N}} (padrão: 7)
 - "calendar_create" — quer criar evento. Params: \
 {{"summary": "...", "start": "ISO_8601_COM_TZ", "end": "ISO_8601_COM_TZ", "location": "..."}}
-- "calendar_edit" — quer editar evento. Params: {{"event_id": "..."}} (se conhecido)
-- "calendar_delete" — quer apagar evento. Params: {{"event_id": "..."}}
+- "calendar_edit" — quer alterar evento existente. Params: \
+{{"summary": "...", "start": "ISO_8601_COM_TZ", "end": "ISO_8601_COM_TZ", "location": "..."}} — \
+APENAS os campos a MUDAR. NUNCA incluir event_id (o frontend resolve o evento pelo contexto).
+- "calendar_delete" — quer apagar evento. Params: {{}} — NUNCA event_id (frontend resolve contexto).
 - "contacts_search" — procurar contacto. Params: {{"query": "..."}}
 - "general" — conversa, pergunta, esclarecimento. Params: {{"text": "..."}}
 
@@ -55,6 +57,9 @@ trabalho — só `general` para conversa pura.
 6. Para perguntas vagas como "como estás?", "obrigado", "olá" → general.
 7. Para "marca reunião amanhã" SEM hora → calendar_create com \
 start = amanhã 09:00 (assumir manhã útil).
+8. Para `calendar_edit` e `calendar_delete`, o ID do evento NUNCA é necessário \
+— o frontend mantém contexto do último evento discutido. Para editar, \
+devolve SÓ os campos a mudar.
 
 EXEMPLOS:
 "lê os meus emails" → {{"intent": "read_emails", "params": {{"count": 3}}}}
@@ -64,6 +69,12 @@ EXEMPLOS:
 "start": "{tomorrow_iso_15h}", "end": "{tomorrow_iso_16h}"}}}}
 "cancela o evento" + histórico mostra reunião → \
 {{"intent": "calendar_delete", "params": {{}}}}
+"cancela essa reunião" + histórico mostra evento → \
+{{"intent": "calendar_delete", "params": {{}}}}
+"passa a reunião para sexta às 16h" + histórico mostra evento → \
+{{"intent": "calendar_edit", "params": {{"start": "ISO_SEXTA_16H", "end": "ISO_SEXTA_17H"}}}}
+"muda o local para o Starbucks" + histórico mostra evento → \
+{{"intent": "calendar_edit", "params": {{"location": "Starbucks"}}}}
 "qual o email do João Silva?" → \
 {{"intent": "contacts_search", "params": {{"query": "João Silva"}}}}
 "obrigado Vox" → {{"intent": "general", "params": {{"text": "obrigado Vox"}}}}
