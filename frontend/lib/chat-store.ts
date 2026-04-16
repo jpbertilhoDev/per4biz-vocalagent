@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export type VoxCardType =
   | "email-read"
@@ -51,6 +52,7 @@ interface ChatState {
   addUserMessage: (text: string, isVoice: boolean) => void;
   updateVoxCard: (id: string, updates: Partial<VoxCard>) => void;
   removeVoxCard: (id: string) => void;
+  clearMessages: () => void;
   setMicState: (state: MicState) => void;
   setLiveTranscript: (confirmed: string, hypothesis?: string) => void;
   clearLiveTranscript: () => void;
@@ -62,54 +64,72 @@ function uid(): string {
   return `msg-${Date.now()}-${nextId++}`;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
-  messages: [],
-  micState: "idle",
-  liveTranscript: "",
-  hypothesisTranscript: "",
-  activeAccountId: null,
+// Cap persisted messages so localStorage doesn't blow up over time.
+const MAX_PERSISTED_MESSAGES = 50;
 
-  addVoxCard: (card) =>
-    set((s) => ({
-      messages: [
-        ...s.messages,
-        { role: "vox", ...card, id: uid(), createdAt: Date.now() },
-      ],
-    })),
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      messages: [],
+      micState: "idle",
+      liveTranscript: "",
+      hypothesisTranscript: "",
+      activeAccountId: null,
 
-  addUserMessage: (text, isVoice) =>
-    set((s) => ({
-      messages: [
-        ...s.messages,
-        {
-          role: "user",
-          id: uid(),
-          text,
-          isVoice,
-          createdAt: Date.now(),
-        },
-      ],
-    })),
+      addVoxCard: (card) =>
+        set((s) => ({
+          messages: [
+            ...s.messages,
+            { role: "vox", ...card, id: uid(), createdAt: Date.now() },
+          ].slice(-MAX_PERSISTED_MESSAGES),
+        })),
 
-  updateVoxCard: (id, updates) =>
-    set((s) => ({
-      messages: s.messages.map((m) =>
-        m.role === "vox" && m.id === id ? { ...m, ...updates } : m,
-      ),
-    })),
+      addUserMessage: (text, isVoice) =>
+        set((s) => ({
+          messages: [
+            ...s.messages,
+            {
+              role: "user",
+              id: uid(),
+              text,
+              isVoice,
+              createdAt: Date.now(),
+            },
+          ].slice(-MAX_PERSISTED_MESSAGES),
+        })),
 
-  removeVoxCard: (id) =>
-    set((s) => ({
-      messages: s.messages.filter((m) => !(m.role === "vox" && m.id === id)),
-    })),
+      updateVoxCard: (id, updates) =>
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.role === "vox" && m.id === id ? { ...m, ...updates } : m,
+          ),
+        })),
 
-  setMicState: (micState) => set({ micState }),
+      removeVoxCard: (id) =>
+        set((s) => ({
+          messages: s.messages.filter((m) => !(m.role === "vox" && m.id === id)),
+        })),
 
-  setLiveTranscript: (confirmed, hypothesis = "") =>
-    set({ liveTranscript: confirmed, hypothesisTranscript: hypothesis }),
+      clearMessages: () => set({ messages: [] }),
 
-  clearLiveTranscript: () =>
-    set({ liveTranscript: "", hypothesisTranscript: "" }),
+      setMicState: (micState) => set({ micState }),
 
-  setActiveAccount: (activeAccountId) => set({ activeAccountId }),
-}));
+      setLiveTranscript: (confirmed, hypothesis = "") =>
+        set({ liveTranscript: confirmed, hypothesisTranscript: hypothesis }),
+
+      clearLiveTranscript: () =>
+        set({ liveTranscript: "", hypothesisTranscript: "" }),
+
+      setActiveAccount: (activeAccountId) => set({ activeAccountId }),
+    }),
+    {
+      name: "vox-chat-store",
+      storage: createJSONStorage(() => localStorage),
+      // Only persist the conversation, not transient UI state
+      partialize: (state) => ({
+        messages: state.messages,
+        activeAccountId: state.activeAccountId,
+      }),
+    },
+  ),
+);

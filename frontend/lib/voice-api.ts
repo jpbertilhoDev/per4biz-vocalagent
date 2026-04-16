@@ -87,10 +87,13 @@ export interface IntentResponse {
   model_ms: number;
 }
 
-export async function postIntent(transcript: string): Promise<IntentResponse> {
+export async function postIntent(
+  transcript: string,
+  history: ChatHistoryMessage[] = [],
+): Promise<IntentResponse> {
   return apiFetch<IntentResponse>("/voice/intent", {
     method: "POST",
-    body: JSON.stringify({ transcript }),
+    body: JSON.stringify({ transcript, history }),
   });
 }
 

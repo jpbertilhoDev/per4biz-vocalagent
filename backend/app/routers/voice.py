@@ -74,6 +74,7 @@ class IntentRequest(BaseModel):
     """Body de `POST /voice/intent` — classifies user transcript into action."""
 
     transcript: str = Field(..., min_length=1, max_length=2000)
+    history: list[dict[str, str]] = Field(default_factory=list, max_length=20)
 
 
 class ChatRequest(BaseModel):
@@ -221,7 +222,7 @@ def intent(
         - 502: falha upstream Groq.
     """
     try:
-        result = voice_intent.classify_intent(req.transcript)
+        result = voice_intent.classify_intent(req.transcript, req.history)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "voice.intent.upstream_fail",
