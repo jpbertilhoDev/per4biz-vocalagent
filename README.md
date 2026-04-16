@@ -2,11 +2,6 @@
 
 > PWA mobile que responde emails e marca reuniões por voz, em múltiplas contas Google, com latência < 4s.
 
-**Cliente:** JP Bertilho (mkt-agency)
-**Status:** PRD v1.0 completo — aguarda validação do PO e início do Sprint 0
-**Kickoff alvo:** Semana de 2026-04-20
-**V1 Beta alvo:** 2026-07-20 (13 semanas)
-
 ---
 
 ## Índice de documentos
@@ -75,7 +70,7 @@ O projeto está configurado para o workflow de [Superpowers](https://github.com/
 ## Estrutura da pasta
 
 ```
-clientes/Per4Biz/
+Per4Biz/
 ├── README.md                    ← este ficheiro (índice)
 ├── CLAUDE.md                    ← instruções projeto-específicas p/ Superpowers
 ├── .gitignore
