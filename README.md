@@ -1,4 +1,4 @@
-# Per4Biz — Copiloto Vocal de Email e Agenda
+# Per4Biz — AGENT Vocal de Email e Agenda
 
 > PWA mobile que responde emails e marca reuniões por voz, em múltiplas contas Google, com latência < 4s.
 
