@@ -12,9 +12,11 @@ import {
   postTranscribe,
   postPolish,
   postIntent,
+  postChat,
   fetchTTS,
   speakFallback,
   type PolishContext,
+  type ChatHistoryMessage,
 } from "@/lib/voice-api";
 import {
   emailsKeys,
@@ -26,7 +28,7 @@ import {
   type EmailListResponse,
   type EmailDetail,
 } from "@/lib/queries";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function useVoxRecorder() {
@@ -99,11 +101,40 @@ export default function ChatPage() {
     }
   }, [emailData?.emails?.length, welcomeSent, messages.length, addVoxCard]);
 
+  // Pause all page audio/video elements so they don't mix with Vox TTS.
+  // Returns a function to restore them after speaking.
+  const mutePageAudio = useCallback((): (() => void) => {
+    // Cancel any ongoing Web Speech API utterances
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    // Pause all other <audio> and <video> elements on the page
+    const mediaElements: HTMLMediaElement[] = [];
+    if (typeof document !== "undefined") {
+      document.querySelectorAll<HTMLMediaElement>("audio:not([data-vox]), video").forEach((el) => {
+        if (!el.paused) {
+          el.pause();
+          mediaElements.push(el);
+        }
+      });
+    }
+
+    return () => {
+      // Restore previously playing media
+      mediaElements.forEach((el) => {
+        el.play().catch(() => {});
+      });
+    };
+  }, []);
+
   const playTTS = useCallback(async (text: string): Promise<void> => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; }
 
+    const restoreAudio = mutePageAudio();
     setMicState("speaking");
+
     try {
       const blob = await fetchTTS(text.slice(0, 4000));
       if (blob.size < 100) {
@@ -112,27 +143,29 @@ export default function ChatPage() {
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;
       const audio = new Audio(url);
+      audio.dataset.vox = "true"; // mark as Vox audio so mutePageAudio skips it
       audioRef.current = audio;
       audio.onended = () => {
         setMicState("idle");
         URL.revokeObjectURL(url);
         audioUrlRef.current = null;
+        restoreAudio();
       };
       audio.onerror = () => {
         console.warn("[Vox] Audio playback error, falling back to browser TTS");
         setMicState("idle");
         URL.revokeObjectURL(url);
         audioUrlRef.current = null;
+        restoreAudio();
         speakFallback(text.slice(0, 4000)).catch(() => {});
       };
       await audio.play();
     } catch (err) {
       console.warn("[Vox] ElevenLabs TTS failed, trying browser fallback:", err);
-      // ElevenLabs failed — try browser TTS fallback
+      restoreAudio();
       try {
         await speakFallback(text.slice(0, 4000));
       } catch {
-        // Both TTS methods failed — show feedback
         addVoxCard({
           type: "error",
           title: "Voz indisponível",
@@ -141,7 +174,7 @@ export default function ChatPage() {
       }
       setMicState("idle");
     }
-  }, [setMicState, addVoxCard]);
+  }, [setMicState, addVoxCard, mutePageAudio]);
 
   const handleReadEmails = useCallback(async (count = 3) => {
     if (!emailData?.emails?.length) {
@@ -272,9 +305,19 @@ export default function ChatPage() {
           const voiceSummary = events.slice(0, 5).map((e) => `${e.summary} ${e.is_all_day ? "todo o dia" : `às ${new Date(e.start).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`}`).join(". ");
           await playTTS(`Tens ${events.length} evento${events.length > 1 ? "s" : ""}. ${voiceSummary}`);
         }
-      } catch {
-        addVoxCard({ type: "error", title: "Erro", content: "Não consegui carregar a agenda." });
-        await playTTS("Não consegui carregar a agenda.");
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 403 || err.detail === "calendar_scope_missing")) {
+          addVoxCard({
+            type: "error",
+            title: "Permissão necessária",
+            content: "Preciso de acesso ao teu Google Calendar. Faz login novamente para autorizar.",
+            actions: [{ label: "Autorizar agenda", action: "reauth" }],
+          });
+          await playTTS("Preciso de acesso ao teu calendário. Toca em 'Autorizar agenda' para dar permissão.");
+        } else {
+          addVoxCard({ type: "error", title: "Erro", content: "Não consegui carregar a agenda." });
+          await playTTS("Não consegui carregar a agenda. Verifica a tua ligação.");
+        }
       }
     } else if (intent === "calendar_create") {
       const { summary, start, end } = intentResult.params as { summary?: string; start?: string; end?: string };
@@ -299,9 +342,19 @@ export default function ChatPage() {
           },
         });
         await playTTS(`Evento "${created.summary}" criado com sucesso.`);
-      } catch {
-        addVoxCard({ type: "error", title: "Erro", content: "Não consegui criar o evento." });
-        await playTTS("Não consegui criar o evento.");
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 403 || err.detail === "calendar_scope_missing")) {
+          addVoxCard({
+            type: "error",
+            title: "Permissão necessária",
+            content: "Preciso de acesso ao Google Calendar para criar eventos. Faz login novamente.",
+            actions: [{ label: "Autorizar agenda", action: "reauth" }],
+          });
+          await playTTS("Preciso de permissão para criar eventos. Toca em Autorizar agenda.");
+        } else {
+          addVoxCard({ type: "error", title: "Erro", content: "Não consegui criar o evento." });
+          await playTTS("Não consegui criar o evento. Verifica a tua ligação.");
+        }
       }
     } else if (intent === "calendar_edit") {
       addVoxCard({ type: "transcription", title: "Editar evento", content: "Para editar um evento, abre a tab Agenda e faz as alterações lá." });
@@ -332,17 +385,49 @@ export default function ChatPage() {
           const names = contacts.slice(0, 3).map((c) => c.display_name || c.emails[0]).join(", ");
           await playTTS(`Encontrei ${contacts.length} contacto${contacts.length > 1 ? "s" : ""}. ${names}.`);
         }
-      } catch {
-        addVoxCard({ type: "error", title: "Erro", content: "Não consegui procurar contactos." });
-        await playTTS("Não consegui procurar contactos.");
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          addVoxCard({
+            type: "error",
+            title: "Permissão necessária",
+            content: "Preciso de acesso aos teus Google Contacts. Faz login novamente para autorizar.",
+            actions: [{ label: "Autorizar contactos", action: "reauth" }],
+          });
+          await playTTS("Preciso de acesso aos teus contactos. Toca em Autorizar contactos.");
+        } else {
+          addVoxCard({ type: "error", title: "Erro", content: "Não consegui procurar contactos." });
+          await playTTS("Não consegui procurar contactos. Verifica a tua ligação.");
+        }
       }
     } else {
-      addVoxCard({
-        type: "transcription",
-        title: "Não entendi",
-        content: `Quiseste dizer "${transcript}"? Experimenta dizer: "lê os meus emails", "responde ao último email", "agenda" ou "procura contacto".`,
-      });
-      await playTTS("Não percebi o que queres. Experimenta dizer lê os meus emails, agenda, ou procura contacto.");
+      // General intent — respond intelligently via Vox LLM (not just "não entendi")
+      try {
+        // Build conversation history for context (last 10 messages)
+        const history: ChatHistoryMessage[] = messages.slice(-10).reduce<ChatHistoryMessage[]>((acc, msg) => {
+          if (msg.role === "user") {
+            acc.push({ role: "user", content: msg.text });
+          } else if (msg.role === "vox" && msg.content) {
+            acc.push({ role: "assistant", content: `${msg.title ? `${msg.title}: ` : ""}${msg.content}` });
+          }
+          return acc;
+        }, []);
+
+        const chatResult = await postChat(transcript, history);
+        addVoxCard({
+          type: "transcription",
+          title: "Vox",
+          content: chatResult.response_text,
+        });
+        await playTTS(chatResult.response_text);
+      } catch {
+        // Fallback only if chat endpoint fails
+        addVoxCard({
+          type: "transcription",
+          title: "Vox",
+          content: "Não consegui processar o pedido. Tenta de novo.",
+        });
+        await playTTS("Não consegui processar. Tenta de novo.");
+      }
     }
   }, [emailData?.emails, messages, addVoxCard, handleReadEmails, handleReplyToEmail, playTTS]);
 
@@ -446,6 +531,13 @@ export default function ChatPage() {
     if (action === "redo" || action === "retry") {
       recorder.reset();
       setMicState("idle");
+    }
+
+    if (action === "reauth") {
+      // Redirect to Google OAuth re-auth to get new scopes (calendar + contacts)
+      if (typeof window !== "undefined") {
+        window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/auth/google`;
+      }
     }
   }, [emailData?.emails, messages, addVoxCard, updateVoxCard, playTTS, setMicState, recorder, handleReadEmails, handleReplyToEmail]);
 

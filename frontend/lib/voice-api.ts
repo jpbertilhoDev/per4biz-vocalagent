@@ -121,3 +121,23 @@ export async function postIntent(transcript: string): Promise<IntentResponse> {
     body: JSON.stringify({ transcript }),
   });
 }
+
+export interface ChatResponse {
+  response_text: string;
+  model_ms: number;
+}
+
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function postChat(
+  transcript: string,
+  history: ChatHistoryMessage[] = [],
+): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>("/voice/chat", {
+    method: "POST",
+    body: JSON.stringify({ transcript, history }),
+  });
+}

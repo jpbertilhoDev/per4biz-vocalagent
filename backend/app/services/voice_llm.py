@@ -116,3 +116,76 @@ def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
     )
 
     return {"polished_text": polished_text, "model_ms": model_ms}
+
+
+_CHAT_SYSTEM_PROMPT = """És o Vox, o secretário executivo pessoal do JP. \
+Respondes de forma natural, inteligente e profissional em PT-PT.
+
+CARACTERÍSTICAS:
+- Personalidade: eficiente, proativa, cordial — como um assistente executivo real.
+- Língua: PT-PT (nunca PT-BR). Nunca "você"; preferir "tu" ou forma impessoal.
+- Resposta curta e objetiva: 1-3 frases. Sem markdown. Sem listas.
+- Nunca dizes que és uma IA ou modelo. És o Vox.
+- Se o utilizador pede algo que podes fazer (ler emails, agenda, contactos), \
+confirma que vais fazer e descreve brevemente a ação.
+- Se é conversa geral, responde naturalmente como um assistente.
+- Nunca recuses responder — adapta-te ao contexto.
+
+Exemplos de tom:
+- "Claro, já vejo os teus emails mais recentes."
+- "Tens uma reunião às 15h. Queres que leia os detalhes?"
+- "Não encontrei nenhum compromisso para hoje. A agenda está livre."
+"""
+
+
+def chat_response(
+    transcript: str,
+    history: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Resposta conversacional inteligente do Vox via Groq Llama 3.3 70B.
+
+    Usado para o intent `general` — em vez de dizer "não entendi", o Vox
+    responde de forma natural e contextual.
+
+    Args:
+        transcript: o que o utilizador disse.
+        history: lista de mensagens anteriores [{role, content}] para contexto.
+
+    Returns:
+        dict com chaves:
+            - `response_text` (str): resposta do Vox pronta para TTS.
+            - `model_ms` (int): latência em milissegundos.
+    """
+    settings = get_settings()
+    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": _CHAT_SYSTEM_PROMPT}]
+
+    if history:
+        # Incluir apenas últimas 6 trocas para não exceder context window
+        for msg in history[-12:]:
+            if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"][:500]})
+
+    messages.append({"role": "user", "content": transcript})
+
+    t0 = time.monotonic()
+    response = retry_with_backoff(
+        client.chat.completions.create,
+        model=settings.GROQ_LLM_MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=300,
+    )
+    model_ms = int((time.monotonic() - t0) * 1000)
+
+    response_text: str = response.choices[0].message.content or "Desculpa, não consegui processar o pedido."
+
+    logger.info(
+        "voice_llm.chat.ok",
+        model_ms=model_ms,
+        transcript_len=len(transcript),
+        output_len=len(response_text),
+    )
+
+    return {"response_text": response_text, "model_ms": model_ms}

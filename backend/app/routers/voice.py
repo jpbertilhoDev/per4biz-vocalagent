@@ -76,6 +76,13 @@ class IntentRequest(BaseModel):
     transcript: str = Field(..., min_length=1, max_length=2000)
 
 
+class ChatRequest(BaseModel):
+    """Body de `POST /voice/chat` — conversational AI response."""
+
+    transcript: str = Field(..., min_length=1, max_length=2000)
+    history: list[dict[str, str]] = Field(default_factory=list, max_length=20)
+
+
 @router.post("/transcribe")
 async def transcribe(
     audio: UploadFile = _AudioFile,
@@ -226,4 +233,35 @@ def intent(
             detail="voice.llm_upstream",
         ) from exc
     logger.info("voice.intent.ok", user_sub=user["sub"], intent=result.get("intent"))
+    return result
+
+
+@router.post("/chat")
+def chat(
+    req: ChatRequest,
+    user: dict[str, Any] = _CurrentUser,
+) -> dict[str, Any]:
+    """Conversational AI response for general/unrecognized intents.
+
+    Uses Groq Llama 3.3 70B to generate a natural, context-aware Vox reply.
+    Called when intent classification returns `general`.
+
+    Returns:
+        - 200 OK: `{response_text, model_ms}`
+        - 401: cookie ausente/inválido.
+        - 502: falha upstream Groq.
+    """
+    try:
+        result = voice_llm.chat_response(req.transcript, req.history)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "voice.chat.upstream_fail",
+            error_type=type(exc).__name__,
+            user_sub=user["sub"],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="voice.llm_upstream",
+        ) from exc
+    logger.info("voice.chat.ok", user_sub=user["sub"])
     return result
