@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Mic } from "lucide-react";
 
 import { useChatStore, buildHistoryFromMessages, type VoxCard, type MicState } from "@/lib/chat-store";
 import { VoxCard as VoxCardComponent } from "@/components/vox-card";
@@ -558,7 +558,19 @@ export default function ChatPage() {
         }
       }
     } else {
-      // General intent — respond intelligently via Vox LLM (not just "não entendi")
+      // General intent. If the classifier flagged ambiguity, ask the user to
+      // repeat instead of inventing a chat reply — senior-secretary behaviour.
+      if (intentResult.params.ask_clarification === true) {
+        addVoxCard({
+          type: "transcription",
+          title: "Não percebi",
+          content: "Podes repetir, com mais contexto?",
+        });
+        await playTTS("Não percebi. Podes repetir?");
+        return;
+      }
+
+      // Normal general chat — respond intelligently via Vox LLM.
       try {
         // Build conversation history for context (last 10 messages)
         const history = buildHistoryFromMessages(messages);
@@ -598,8 +610,6 @@ export default function ChatPage() {
     if (recorder.state !== "ready" || !recorder.audioBlob) return;
 
     setMicState("processing");
-
-    addVoxCard({ type: "transcription", title: "A processar…", content: "" });
 
     let transcribedText = "";
 
@@ -871,9 +881,22 @@ export default function ChatPage() {
                   <p className="text-sm leading-relaxed text-text-primary">{msg.text}</p>
                 )}
               </div>
-              <span className="mr-2 mt-1 text-[10px] text-text-tertiary">
-                {new Date(msg.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
-              </span>
+              {msg.isVoice ? (
+                <span className="mr-2 mt-1 flex items-center gap-1 text-[10px] text-text-tertiary">
+                  <Mic
+                    className="h-2.5 w-2.5 text-voice"
+                    strokeWidth={2}
+                    aria-label="Transcrito da voz"
+                  />
+                  <span title="Transcrito da voz">
+                    {new Date(msg.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </span>
+              ) : (
+                <span className="mr-2 mt-1 text-[10px] text-text-tertiary">
+                  {new Date(msg.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
             </div>
           );
         })}
