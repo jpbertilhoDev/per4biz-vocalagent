@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 
-import { useChatStore, type VoxCard, type MicState } from "@/lib/chat-store";
+import { useChatStore, buildHistoryFromMessages, type VoxCard, type MicState } from "@/lib/chat-store";
 import { VoxCard as VoxCardComponent } from "@/components/vox-card";
 import { MicButton } from "@/components/mic-button";
 import { useMediaRecorder } from "@/lib/use-media-recorder";
@@ -15,7 +15,6 @@ import {
   postChat,
   fetchTTS,
   type PolishContext,
-  type ChatHistoryMessage,
 } from "@/lib/voice-api";
 import {
   emailsKeys,
@@ -245,8 +244,11 @@ export default function ChatPage() {
   const processIntent = useCallback(async (transcript: string) => {
     let intentResult: { intent: string; params: Record<string, unknown> };
 
+    // Build history from last 10 chat messages for multi-turn reference resolution.
+    const history = buildHistoryFromMessages(messages);
+
     try {
-      const result = await postIntent(transcript);
+      const result = await postIntent(transcript, history);
       intentResult = { intent: result.intent, params: result.params };
     } catch {
       intentResult = { intent: "general", params: {} };
@@ -441,14 +443,7 @@ export default function ChatPage() {
       // General intent — respond intelligently via Vox LLM (not just "não entendi")
       try {
         // Build conversation history for context (last 10 messages)
-        const history: ChatHistoryMessage[] = messages.slice(-10).reduce<ChatHistoryMessage[]>((acc, msg) => {
-          if (msg.role === "user") {
-            acc.push({ role: "user", content: msg.text });
-          } else if (msg.role === "vox" && msg.content) {
-            acc.push({ role: "assistant", content: `${msg.title ? `${msg.title}: ` : ""}${msg.content}` });
-          }
-          return acc;
-        }, []);
+        const history = buildHistoryFromMessages(messages);
 
         const chatResult = await postChat(transcript, history);
         addVoxCard({

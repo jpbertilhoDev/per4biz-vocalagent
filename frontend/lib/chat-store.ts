@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+import type { ChatHistoryMessage } from "./voice-api";
+
 export type VoxCardType =
   | "email-read"
   | "transcription"
@@ -67,6 +69,33 @@ function uid(): string {
 // Cap persisted messages so localStorage doesn't blow up over time.
 const MAX_PERSISTED_MESSAGES = 50;
 
+/**
+ * Build the LLM-facing conversation history from the last N chat-store messages.
+ *
+ * User turns pass through verbatim; Vox turns are serialized as "Title: content"
+ * when a title exists, or just content otherwise. Messages without textual
+ * content are dropped (e.g. loading placeholders) so the LLM never sees ghosts.
+ *
+ * @param messages — the full chat-store messages array
+ * @param limit — how many trailing messages to consider (default 10)
+ */
+export function buildHistoryFromMessages(
+  messages: ChatMessage[],
+  limit = 10,
+): ChatHistoryMessage[] {
+  return messages.slice(-limit).reduce<ChatHistoryMessage[]>((acc, msg) => {
+    if (msg.role === "user") {
+      acc.push({ role: "user", content: msg.text });
+    } else if (msg.role === "vox" && msg.content) {
+      acc.push({
+        role: "assistant",
+        content: msg.title ? `${msg.title}: ${msg.content}` : msg.content,
+      });
+    }
+    return acc;
+  }, []);
+}
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set) => ({
@@ -80,7 +109,7 @@ export const useChatStore = create<ChatState>()(
         set((s) => ({
           messages: [
             ...s.messages,
-            { role: "vox", ...card, id: uid(), createdAt: Date.now() },
+            { role: "vox" as const, ...card, id: uid(), createdAt: Date.now() },
           ].slice(-MAX_PERSISTED_MESSAGES),
         })),
 
@@ -89,7 +118,7 @@ export const useChatStore = create<ChatState>()(
           messages: [
             ...s.messages,
             {
-              role: "user",
+              role: "user" as const,
               id: uid(),
               text,
               isVoice,

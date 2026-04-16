@@ -1,0 +1,22 @@
+[
+  {"id":"MT-01","description":"responde ao anterior → reply sem context","history":[],"transcript":"responde ao primeiro email","expected":{"intent":"reply"}},
+  {"id":"MT-02","description":"cancela 'essa' reunião após calendar_list","history":[{"role":"user","content":"o que tenho hoje?"},{"role":"assistant","content":"Tens reunião com Maria às 15h"}],"transcript":"cancela essa reunião","expected":{"intent":"calendar_delete"}},
+  {"id":"MT-03","description":"'muda para sexta' após calendar_create → edit","history":[{"role":"user","content":"marca reunião quinta 15h"},{"role":"assistant","content":"Evento criado para quinta 15h"}],"transcript":"muda para sexta","expected":{"intent":"calendar_edit"}},
+  {"id":"MT-04","description":"'envia' após draft visível → send","history":[{"role":"assistant","content":"Draft pronto: Obrigado João, confirmo a reunião"}],"transcript":"envia","expected":{"intent":"send"}},
+  {"id":"MT-05","description":"'obrigado' genérico → general","history":[],"transcript":"obrigado","expected":{"intent":"general"}},
+  {"id":"MT-06","description":"'mostra mais' após read_emails","history":[{"role":"user","content":"lê os 3 primeiros emails"},{"role":"assistant","content":"Tens 3 emails de João, Maria e Ana"}],"transcript":"mostra mais","expected":{"intent":"read_emails"}},
+  {"id":"MT-07","description":"marca amanhã","history":[],"transcript":"marca reunião com Pedro amanhã às 10h","expected":{"intent":"calendar_create"}},
+  {"id":"MT-08","description":"refinamento João","history":[{"role":"user","content":"procura o João"},{"role":"assistant","content":"Encontrei 3 Joãos: João Silva, João Costa, João Pereira"}],"transcript":"o João Silva","expected":{"intent":"contacts_search","paramsContain":{"query":"João Silva"}}},
+  {"id":"MT-09","description":"meio da manhã","history":[],"transcript":"o que tenho a meio da manhã","expected":{"intent":"calendar_list"}},
+  {"id":"MT-10","description":"amanhã follow-up","history":[{"role":"user","content":"o que tenho hoje?"},{"role":"assistant","content":"Reunião Maria 15h"}],"transcript":"e amanhã?","expected":{"intent":"calendar_list"}},
+  {"id":"MT-11","description":"apaga o último ambíguo","history":[{"role":"assistant","content":"3 emails: João, Maria, Ana"}],"transcript":"apaga o último","expected":{"intent":"general"}},
+  {"id":"MT-12","description":"sim confirma","history":[{"role":"assistant","content":"Criar reunião Maria quinta 15h-16h. Confirmas?"}],"transcript":"sim confirma","expected":{"intent":"general"}},
+  {"id":"MT-13","description":"adiciona contacto","history":[],"transcript":"adiciona o João Costa joao@x.pt","expected":{"intent":"contacts_search"}},
+  {"id":"MT-14","description":"lê o primeiro","history":[{"role":"user","content":"procura emails do João"},{"role":"assistant","content":"2 emails de João Silva"}],"transcript":"lê o primeiro","expected":{"intent":"read_emails"}},
+  {"id":"MT-15","description":"olá","history":[],"transcript":"olá Vox","expected":{"intent":"general"}},
+  {"id":"MT-16","description":"quanto tempo pergunta","history":[{"role":"assistant","content":"Reunião Maria às 15h"}],"transcript":"quanto tempo até à reunião?","expected":{"intent":"general"}},
+  {"id":"MT-17","description":"manda agora","history":[{"role":"assistant","content":"Draft: Olá João, confirmo"}],"transcript":"manda agora","expected":{"intent":"send"}},
+  {"id":"MT-18","description":"próxima semana","history":[],"transcript":"o que tenho na próxima semana","expected":{"intent":"calendar_list"}},
+  {"id":"MT-19","description":"cria outro às 17h","history":[{"role":"user","content":"marca reunião quinta 15h"},{"role":"assistant","content":"Evento criado"}],"transcript":"cria outro às 17h","expected":{"intent":"calendar_create"}},
+  {"id":"MT-20","description":"sumariza","history":[],"transcript":"sumariza os emails","expected":{"intent":"summarize"}}
+]
