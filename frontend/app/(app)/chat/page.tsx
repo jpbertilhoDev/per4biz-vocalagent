@@ -14,7 +14,6 @@ import {
   postIntent,
   postChat,
   fetchTTS,
-  speakFallback,
   type PolishContext,
   type ChatHistoryMessage,
 } from "@/lib/voice-api";
@@ -152,26 +151,26 @@ export default function ChatPage() {
         restoreAudio();
       };
       audio.onerror = () => {
-        console.warn("[Vox] Audio playback error, falling back to browser TTS");
+        console.warn("[Vox] ElevenLabs audio playback error");
         setMicState("idle");
         URL.revokeObjectURL(url);
         audioUrlRef.current = null;
         restoreAudio();
-        speakFallback(text.slice(0, 4000)).catch(() => {});
-      };
-      await audio.play();
-    } catch (err) {
-      console.warn("[Vox] ElevenLabs TTS failed, trying browser fallback:", err);
-      restoreAudio();
-      try {
-        await speakFallback(text.slice(0, 4000));
-      } catch {
         addVoxCard({
           type: "error",
           title: "Voz indisponível",
-          content: "Não foi possível reproduzir áudio. Verifica a tua ligação.",
+          content: "Falha ao reproduzir áudio do ElevenLabs.",
         });
-      }
+      };
+      await audio.play();
+    } catch (err) {
+      console.warn("[Vox] ElevenLabs TTS failed:", err);
+      restoreAudio();
+      addVoxCard({
+        type: "error",
+        title: "Voz indisponível",
+        content: "ElevenLabs não respondeu. Verifica a ligação ou a chave da API.",
+      });
       setMicState("idle");
     }
   }, [setMicState, addVoxCard, mutePageAudio]);
@@ -179,33 +178,44 @@ export default function ChatPage() {
   const handleReadEmails = useCallback(async (count = 3) => {
     if (!emailData?.emails?.length) {
       addVoxCard({ type: "error", title: "Sem emails", content: "Não encontrei emails na caixa de entrada." });
+      await playTTS("Não tens emails na caixa de entrada.");
       return;
     }
 
     const toRead = emailData.emails.slice(0, count);
-    const summaryParts: string[] = [];
 
+    // Show cards for each email (visual reference, not read aloud)
     for (const email of toRead) {
       addVoxCard({
         type: "email-read",
         title: email.subject || "(sem assunto)",
-        content: email.snippet || "(sem conteúdo)",
+        content: email.snippet || "",
         meta: {
           De: email.from_name ?? email.from_email,
           Hora: new Date(email.received_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }),
         },
         actions: [
-          { label: "Ouvir", action: "tts" },
-          { label: "Ouvir completo", action: "tts-full" },
+          { label: "Resumir", action: "summarize-one" },
+          { label: "Ler completo", action: "tts-full" },
           { label: "Responder", action: "reply" },
         ],
       });
-
-      summaryParts.push(`${email.from_name ?? email.from_email}: ${email.subject}. ${email.snippet?.slice(0, 80) ?? ""}`);
     }
 
-    const ttsText = `Tens ${toRead.length} email${toRead.length > 1 ? "s" : ""}. ${summaryParts.join(". ")}`;
-    await playTTS(ttsText);
+    // Concise voice summary — sender + topic only, like an executive briefing
+    const senders = toRead.map((e) => e.from_name ?? e.from_email.split("@")[0]);
+    const uniqueSenders = [...new Set(senders)];
+    let voiceText = `Tens ${toRead.length} email${toRead.length > 1 ? "s" : ""}`;
+    if (uniqueSenders.length === 1) {
+      voiceText += ` de ${uniqueSenders[0]}`;
+    } else if (uniqueSenders.length <= 3) {
+      voiceText += ` de ${uniqueSenders.slice(0, -1).join(", ")} e ${uniqueSenders.at(-1)}`;
+    } else {
+      voiceText += ` de ${uniqueSenders.length} pessoas diferentes`;
+    }
+    voiceText += ". Diz-me qual queres abrir.";
+
+    await playTTS(voiceText);
   }, [emailData?.emails, addVoxCard, playTTS]);
 
   const handleReplyToEmail = useCallback(async (emailId: string) => {
@@ -306,17 +316,33 @@ export default function ChatPage() {
           await playTTS(`Tens ${events.length} evento${events.length > 1 ? "s" : ""}. ${voiceSummary}`);
         }
       } catch (err) {
-        if (err instanceof ApiError && (err.status === 403 || err.detail === "calendar_scope_missing")) {
-          addVoxCard({
-            type: "error",
-            title: "Permissão necessária",
-            content: "Preciso de acesso ao teu Google Calendar. Faz login novamente para autorizar.",
-            actions: [{ label: "Autorizar agenda", action: "reauth" }],
-          });
-          await playTTS("Preciso de acesso ao teu calendário. Toca em 'Autorizar agenda' para dar permissão.");
+        if (err instanceof ApiError) {
+          if (err.detail === "calendar_scope_missing") {
+            addVoxCard({
+              type: "error",
+              title: "Permissão em falta",
+              content: "O scope do Google Calendar não foi concedido. Volta a autorizar.",
+              actions: [{ label: "Autorizar agenda", action: "reauth" }],
+            });
+            await playTTS("Falta-me permissão para o calendário. Autoriza, por favor.");
+          } else if (err.detail === "calendar_api_not_enabled") {
+            addVoxCard({
+              type: "error",
+              title: "Calendar API desativada",
+              content: "O administrador precisa ativar a Google Calendar API no Google Cloud Console (APIs & Services → Library).",
+            });
+            await playTTS("A Calendar API não está ativada no Google Cloud.");
+          } else {
+            addVoxCard({
+              type: "error",
+              title: `Erro ${err.status}`,
+              content: err.detail,
+            });
+            await playTTS("Não consegui carregar a agenda.");
+          }
         } else {
           addVoxCard({ type: "error", title: "Erro", content: "Não consegui carregar a agenda." });
-          await playTTS("Não consegui carregar a agenda. Verifica a tua ligação.");
+          await playTTS("Não consegui carregar a agenda.");
         }
       }
     } else if (intent === "calendar_create") {
@@ -343,17 +369,29 @@ export default function ChatPage() {
         });
         await playTTS(`Evento "${created.summary}" criado com sucesso.`);
       } catch (err) {
-        if (err instanceof ApiError && (err.status === 403 || err.detail === "calendar_scope_missing")) {
-          addVoxCard({
-            type: "error",
-            title: "Permissão necessária",
-            content: "Preciso de acesso ao Google Calendar para criar eventos. Faz login novamente.",
-            actions: [{ label: "Autorizar agenda", action: "reauth" }],
-          });
-          await playTTS("Preciso de permissão para criar eventos. Toca em Autorizar agenda.");
+        if (err instanceof ApiError) {
+          if (err.detail === "calendar_scope_missing") {
+            addVoxCard({
+              type: "error",
+              title: "Permissão em falta",
+              content: "Falta o scope do Calendar. Volta a autorizar.",
+              actions: [{ label: "Autorizar agenda", action: "reauth" }],
+            });
+            await playTTS("Falta-me permissão para criar eventos.");
+          } else if (err.detail === "calendar_api_not_enabled") {
+            addVoxCard({
+              type: "error",
+              title: "Calendar API desativada",
+              content: "Ativa a Google Calendar API no Google Cloud Console.",
+            });
+            await playTTS("A Calendar API não está ativada.");
+          } else {
+            addVoxCard({ type: "error", title: `Erro ${err.status}`, content: err.detail });
+            await playTTS("Não consegui criar o evento.");
+          }
         } else {
           addVoxCard({ type: "error", title: "Erro", content: "Não consegui criar o evento." });
-          await playTTS("Não consegui criar o evento. Verifica a tua ligação.");
+          await playTTS("Não consegui criar o evento.");
         }
       }
     } else if (intent === "calendar_edit") {
@@ -475,13 +513,14 @@ export default function ChatPage() {
     }
 
     if (action === "tts" && card) {
-      playTTS(`${card.title}. ${card.content}`);
+      // Repeat what's already on the card — short.
+      playTTS(card.content?.slice(0, 300) ?? card.title ?? "");
     }
 
-    if (action === "tts-full" && card?.meta?.De) {
+    if ((action === "summarize-one" || action === "tts-full") && card?.meta?.De) {
       const email = emailData?.emails?.find((e) => (e.from_name ?? e.from_email) === card.meta!.De);
       if (email) {
-        getEmail(email.id).then((detail: EmailDetail) => {
+        getEmail(email.id).then(async (detail: EmailDetail) => {
           lastEmailRef.current = {
             fromName: detail.from_name ?? detail.from_email,
             fromEmail: detail.from_email,
@@ -489,7 +528,26 @@ export default function ChatPage() {
             body: detail.body_text,
             id: detail.id,
           };
-          playTTS(`Email de ${detail.from_name ?? detail.from_email}. Assunto: ${detail.subject}. ${detail.body_text.slice(0, 2000)}`);
+
+          // Ask the LLM for a 1-2 sentence executive summary instead of reading the whole email
+          try {
+            const result = await postChat(
+              `Resume este email em 1-2 frases curtas, como um secretário executivo. Não leias verbatim, captura só o essencial.\n\nDe: ${detail.from_name ?? detail.from_email}\nAssunto: ${detail.subject}\nCorpo:\n${detail.body_text.slice(0, 3000)}`,
+              [],
+            );
+            addVoxCard({
+              type: "email-read",
+              title: `Resumo: ${detail.subject}`,
+              content: result.response_text,
+              meta: { De: detail.from_name ?? detail.from_email },
+              actions: [{ label: "Responder", action: "reply" }],
+            });
+            playTTS(result.response_text);
+          } catch {
+            // Fallback: short snippet
+            const snippet = detail.body_text.slice(0, 200);
+            playTTS(`${detail.from_name ?? detail.from_email}: ${detail.subject}. ${snippet}`);
+          }
         });
       }
     }
@@ -536,7 +594,7 @@ export default function ChatPage() {
     if (action === "reauth") {
       // Redirect to Google OAuth re-auth to get new scopes (calendar + contacts)
       if (typeof window !== "undefined") {
-        window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/auth/google`;
+        window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/auth/google/start`;
       }
     }
   }, [emailData?.emails, messages, addVoxCard, updateVoxCard, playTTS, setMicState, recorder, handleReadEmails, handleReplyToEmail]);

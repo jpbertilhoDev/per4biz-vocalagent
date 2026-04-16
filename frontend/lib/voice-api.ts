@@ -76,38 +76,10 @@ export async function fetchTTS(text: string, voiceId?: string): Promise<Blob> {
 }
 
 /**
- * Browser-native TTS fallback via Web Speech Synthesis API.
- * Used when ElevenLabs is unavailable (502/timeout).
- * Returns a promise that resolves when speech ends.
+ * Web Speech API removed — Vox uses ElevenLabs exclusively.
+ * If ElevenLabs fails, the UI surfaces a visible error card; no robotic
+ * fallback voice is ever played to keep voice identity consistent.
  */
-export function speakFallback(text: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      reject(new Error("Web Speech API not available"));
-      return;
-    }
-
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 4000));
-    utterance.lang = "pt-PT";
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    // Try to find a PT-PT voice
-    const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find((v) => v.lang.startsWith("pt"));
-    if (ptVoice) {
-      utterance.voice = ptVoice;
-    }
-
-    utterance.onend = () => resolve();
-    utterance.onerror = (event) => reject(new Error(`speech synthesis failed: ${event.error}`));
-
-    window.speechSynthesis.speak(utterance);
-  });
-}
 
 export interface IntentResponse {
   intent: string;

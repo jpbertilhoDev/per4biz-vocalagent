@@ -40,33 +40,43 @@ def _handle_google_http_error(exc: HttpError, operation: str) -> None:
     - 403 Insufficient Permission → 403 with re-auth hint
     - 403 Calendar API not enabled → 502 with specific detail
     - 404 Not Found → 404
-    - Other → 502
+    - Other → 502 with the original Google error message exposed
     """
     resp_status = exc.resp.status if exc.resp else 500
-    error_content = str(exc.content or b"").lower() if exc.content else ""
+    raw_content = exc.content.decode("utf-8", errors="replace") if exc.content else ""
+    error_content_lower = raw_content.lower()
 
     logger.warning(
         f"calendar.{operation}.google_error",
         status_code=resp_status,
         error_type=type(exc).__name__,
-        error_reason=str(exc)[:200],
+        error_reason=raw_content[:500],
     )
 
     if resp_status == 403:
-        if "insufficient permission" in error_content or "insufficientpermissions" in error_content:
+        if "insufficient permission" in error_content_lower or "insufficientpermissions" in error_content_lower:
             raise HTTPException(
                 status_code=403,
                 detail="calendar_scope_missing",
             ) from exc
-        if "has not been used" in error_content or "not been enabled" in error_content:
+        if "has not been used" in error_content_lower or "not been enabled" in error_content_lower or "accessnotconfigured" in error_content_lower:
             raise HTTPException(
                 status_code=502,
                 detail="calendar_api_not_enabled",
             ) from exc
+        # Other 403 — surface the actual Google error message so the user sees it
+        raise HTTPException(
+            status_code=403,
+            detail=f"calendar_forbidden: {raw_content[:200]}",
+        ) from exc
     if resp_status == 404:
         raise HTTPException(status_code=404, detail="calendar event not found") from exc
 
-    raise HTTPException(status_code=502, detail="calendar upstream error") from exc
+    # Unknown error — expose the Google reason so we can debug from the UI
+    raise HTTPException(
+        status_code=502,
+        detail=f"calendar_upstream: {raw_content[:200]}",
+    ) from exc
 
 
 class CreateEventRequest(BaseModel):
@@ -83,6 +93,37 @@ class UpdateEventRequest(BaseModel):
     end: str | None = None
     description: str | None = None
     location: str | None = None
+
+
+@router.get("/_debug/scopes")
+def debug_scopes(user: dict[str, Any] = _CurrentUser) -> dict[str, Any]:
+    """Diagnostic — returns the actual Google OAuth scopes stored for the user.
+
+    Use to confirm whether re-auth granted Calendar/Contacts scopes.
+    """
+    from app.services import supabase_client
+
+    sb = supabase_client.get_supabase_admin()
+    rows = sb.table("google_accounts").select("google_email,scopes,is_primary,updated_at").eq("user_id", user["sub"]).execute().data
+    required = [
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/contacts.readonly",
+    ]
+    accounts_summary = []
+    for row in rows or []:
+        scopes = row.get("scopes") or []
+        accounts_summary.append({
+            "google_email": row.get("google_email"),
+            "is_primary": row.get("is_primary"),
+            "updated_at": row.get("updated_at"),
+            "scopes": scopes,
+            "has_calendar": "https://www.googleapis.com/auth/calendar" in scopes,
+            "has_calendar_events": "https://www.googleapis.com/auth/calendar.events" in scopes,
+            "has_contacts": "https://www.googleapis.com/auth/contacts.readonly" in scopes,
+            "missing_required": [s for s in required if s not in scopes],
+        })
+    return {"accounts": accounts_summary, "user_sub": user["sub"]}
 
 
 @router.get("/events")
