@@ -1,13 +1,13 @@
 {
   "name": "Per4Biz",
   "short_name": "Per4Biz",
-  "description": "Copiloto vocal de email e agenda — multi-conta Google",
-  "start_url": "/",
+  "description": "Agente vocal de email — fala com o Vox",
+  "start_url": "/chat",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0A84FF",
-  "theme_color": "#0A84FF",
+  "background_color": "#0A0A0F",
+  "theme_color": "#0A0A0F",
   "lang": "pt-PT",
   "dir": "ltr",
   "categories": ["productivity", "business", "utilities"],
@@ -33,13 +33,13 @@
   ],
   "shortcuts": [
     {
-      "name": "Novo email por voz",
-      "short_name": "Ditar",
-      "url": "/voice?intent=compose",
-      "description": "Começar composer vocal"
+      "name": "Falar com Vox",
+      "short_name": "Chat",
+      "url": "/chat",
+      "description": "Abrir conversa com o Vox"
     },
     {
-      "name": "Ler inbox",
+      "name": "Ver inbox",
       "short_name": "Inbox",
       "url": "/inbox",
       "description": "Ver emails recebidos"

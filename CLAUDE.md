@@ -1,8 +1,9 @@
 # Per4Biz — Instruções para Claude
 
-**Produto:** PWA mobile (iOS/Android) — copiloto vocal de email e agenda multi-conta Google.
-**Status:** Sprint 0 pendente. Nenhum código escrito ainda. Docs completos.
-**Stack:** Next.js 16 PWA + FastAPI Python + Supabase + Groq + Claude + ElevenLabs.
+**Produto:** PWA mobile (iOS/Android) — agente vocal de email multi-conta Google.
+**Status:** Pivot chat-first + redesign visual (v2.0). E1-E5 implementados (inbox-first). Redesign em curso.
+**Stack:** Next.js 16 PWA + FastAPI Python + Supabase + Groq + ElevenLabs.
+**Agente:** Vox — o agente IA é a tela principal (chat-first).
 
 Este ficheiro é lido em cada task. Mantém-te breve e segue as regras abaixo.
 
@@ -23,6 +24,7 @@ Este ficheiro é lido em cada task. Mantém-te breve e segue as regras abaixo.
 | **Testing Strategy** (pirâmide unit/integration/E2E + CI) | [06-addendum/TESTING-STRATEGY.md](06-addendum/TESTING-STRATEGY.md) |
 | **Logging Policy** (redacção automática, PII zero) | [06-addendum/LOGGING-POLICY.md](06-addendum/LOGGING-POLICY.md) |
 | **⚡ V1 Execution Scope** (o que fica fora de V1) | [07-v1-scope/EXECUTION-NOTES.md](07-v1-scope/EXECUTION-NOTES.md) |
+| **Design Spec v2.0** (chat-first, dark-first, Vox, Arc+Raycast) | [03-ui-ux/DESIGN-SPEC.md](03-ui-ux/DESIGN-SPEC.md) |
 
 **Regra crítica de execução V1:** Em conflito entre `01-06` (target) e `07-v1-scope/EXECUTION-NOTES.md` (V1) → **vence o V1 scope**. O PRD descreve o futuro; executamos o subset da §7 do EXECUTION-NOTES.
 **Regra:** antes de implementar qualquer RF ou user story, lê a secção correspondente do PRD e Ultraplan. Não inventes requisitos.
@@ -68,6 +70,10 @@ Este ficheiro é lido em cada task. Mantém-te breve e segue as regras abaixo.
 8. **`ALLOWED_USER_EMAIL` gating** — FastAPI verifica `id_token.email == ALLOWED_USER_EMAIL` em `/auth/google/callback`. Se falhar → 403. Esta é a única barreira de auth em V1.
 9. **Backend em Python** — decisão irreversível do PO. Não propor Node/Go/Bun alternatives.
 10. **Groq-only LLM** — sem Anthropic key disponível. Tudo passa por `GROQ_API_KEY` (Llama 3.3 70B + Whisper v3).
+11. **Chat-first architecture** — Vox é a tela principal. Inbox é tab secundária. Não adicionar features que quebrem este paradigma.
+12. **Dark-first only** — sem tema claro em V1. Toda a UI é desenhada para dark `#0A0A0F`.
+13. **Violet `#6C5CE7` = UI, Cyan `#00CEFF` = voz** — cores não se misturam nos roles. Cyan é exclusivamente para microfone, waveform, TTS, Vox speaking.
+14. **Auto-silêncio 2s** — input de voz para automaticamente após 2s de silêncio. Desactivável em Settings.
 
 **Regras adiadas para multi-tenant upgrade** (ver [07-v1-scope/EXECUTION-NOTES.md](07-v1-scope/EXECUTION-NOTES.md)):
 - ~~RLS em toda tabela~~ (não criar policies em V1; `user_id` fica hardcoded para UUID do JP)
@@ -161,9 +167,12 @@ Quando o PO (JP) pedir para implementar algo:
 ## 8. Estado actual & próximos passos
 
 - ✅ PRD, Ultraplan, Design Spec, Sprint Plan, Validação Interna escritos (2026-04-15).
-- ⬜ **PO deve responder às 7 perguntas críticas** em [05-validacao/VALIDACAO-INTERNA.md §5](05-validacao/VALIDACAO-INTERNA.md) — 1 bloqueia Sprint 5 (Calendar V1.x ou V2?).
-- ⬜ **Sprint 0 pendente** — checklist de 20 tarefas em [04-sprints/SPRINT-PLAN.md §9](04-sprints/SPRINT-PLAN.md).
-- ⬜ **Scaffold de código** (frontend/, backend/, supabase/migrations/) a criar no Sprint 0.
+- ✅ E1-E5 implementados (inbox-first architecture) — auth, inbox, voice reply, send.
+- ✅ Repo separado: `github.com/jpbertilhoDev/per4biz-vocalagent`
+- ✅ Design Spec v2.0 — pivot chat-first, dark-first, Vox agent, Arc+Raycast visual (2026-04-16).
+- ⬜ **Redesign frontend para chat-first** — bottom navbar, chat layout, Vox cards, MicButton.
+- ⬜ **Criar SPEC para "chat-first architecture"** em `specs/e6-chat-first-vox/SPEC.md`.
+- ⬜ **Atualizar Sprint Plan** para reflectir pivot (chat-first muda prioridades).
 
 ---
 
@@ -177,3 +186,6 @@ Quando o PO (JP) pedir para implementar algo:
 - Não commit de `.env` real, credenciais ou tokens Google.
 - Não saltar TDD porque "é pequeno".
 - Não bypasses de hooks (`--no-verify`) sem autorização explícita.
+- Não implementar tema claro (dark-first only em V1).
+- Não usar cyan `#00CEFF` para nada que não seja voz/áudio.
+- Não voltar ao paradigma inbox-first — chat-first é a decisão arquitectural.

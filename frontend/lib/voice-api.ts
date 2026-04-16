@@ -20,7 +20,14 @@ export async function postTranscribe(blob: Blob): Promise<TranscribeResponse> {
     if (res.status === 401 && typeof window !== "undefined") {
       window.location.href = "/";
     }
-    throw new Error(`transcribe failed: ${res.status}`);
+    let detail = `transcribe failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // body não é JSON
+    }
+    throw new Error(detail);
   }
   return res.json();
 }
@@ -56,7 +63,61 @@ export async function fetchTTS(text: string, voiceId?: string): Promise<Blob> {
     if (res.status === 401 && typeof window !== "undefined") {
       window.location.href = "/";
     }
-    throw new Error(`tts failed: ${res.status}`);
+    let detail = `tts failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // body não é JSON
+    }
+    throw new Error(detail);
   }
   return res.blob();
+}
+
+/**
+ * Browser-native TTS fallback via Web Speech Synthesis API.
+ * Used when ElevenLabs is unavailable (502/timeout).
+ * Returns a promise that resolves when speech ends.
+ */
+export function speakFallback(text: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      reject(new Error("Web Speech API not available"));
+      return;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 4000));
+    utterance.lang = "pt-PT";
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    // Try to find a PT-PT voice
+    const voices = window.speechSynthesis.getVoices();
+    const ptVoice = voices.find((v) => v.lang.startsWith("pt"));
+    if (ptVoice) {
+      utterance.voice = ptVoice;
+    }
+
+    utterance.onend = () => resolve();
+    utterance.onerror = (event) => reject(new Error(`speech synthesis failed: ${event.error}`));
+
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+export interface IntentResponse {
+  intent: string;
+  params: Record<string, unknown>;
+  model_ms: number;
+}
+
+export async function postIntent(transcript: string): Promise<IntentResponse> {
+  return apiFetch<IntentResponse>("/voice/intent", {
+    method: "POST",
+    body: JSON.stringify({ transcript }),
+  });
 }

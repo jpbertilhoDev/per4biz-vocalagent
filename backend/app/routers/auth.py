@@ -12,6 +12,7 @@ Invariantes de segurança (CLAUDE.md §3, SPEC §5):
     - Cookie `__Host-session` (Secure + Path=/ + sem Domain) OBRIGATÓRIO.
     - Zero logs de `code`, tokens, id_token, state cru ou bodies.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -42,6 +43,9 @@ _GOOGLE_SCOPES = " ".join(
         "https://www.googleapis.com/auth/gmail.readonly",
         "https://www.googleapis.com/auth/gmail.send",
         "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/contacts.readonly",
     ]
 )
 _SESSION_COOKIE_NAME = "__Host-session"
@@ -59,7 +63,7 @@ def start() -> RedirectResponse:
     para forçar a emissão de refresh_token (R-E1.5).
     """
     settings = get_settings()
-    state = sign_state(redirect_to="/inbox")
+    state = sign_state(redirect_to="/chat")
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_REDIRECT_URI,

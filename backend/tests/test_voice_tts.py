@@ -47,6 +47,7 @@ Flags para o specialist (Task 6):
     - **Nunca logar** `text` nem `audio_bytes` (PII — LOGGING-POLICY.md).
       Log apenas `tts_ms` + `text_len` + `bytes_len`.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -66,7 +67,7 @@ MAX_TEXT_CHARS = 5000  # SPEC §3 / RF-V.3 — limite duro de input
 FAKE_MP3_CHUNKS: list[bytes] = [b"\xff\xfb", b"\xe4\x64", b"end"]
 FAKE_MP3_CONCAT: bytes = b"".join(FAKE_MP3_CHUNKS)  # b"\xff\xfb\xe4\x64end"
 
-DEFAULT_VOICE_ID = "JGnWZj684pcXmK2SxYIv"  # definido em conftest / settings
+DEFAULT_VOICE_ID = "XrExE9yKIg1WjnnlVkGX"  # definido em conftest / settings
 
 
 # ---------------------------------------------------------------------------
@@ -105,9 +106,7 @@ def test_tts_returns_audio_bytes_and_mime(mocker: MockerFixture) -> None:
     preservada), `mime == "audio/mpeg"`, `tts_ms >= 0`.
     """
     client = _build_elevenlabs_mock(chunks=FAKE_MP3_CHUNKS)
-    eleven_ctor = mocker.patch(
-        "app.services.voice_tts.ElevenLabs", return_value=client
-    )
+    eleven_ctor = mocker.patch("app.services.voice_tts.ElevenLabs", return_value=client)
 
     from app.services.voice_tts import synthesize
 
@@ -139,7 +138,7 @@ def test_tts_uses_default_voice_id_from_settings(mocker: MockerFixture) -> None:
     """RF-V.3 — quando `voice_id` não é passado, usa `ELEVENLABS_VOICE_ID` das settings.
 
     Sem argumento, o serviço tem de ler do `get_settings().ELEVENLABS_VOICE_ID`
-    (conftest fixa `"JGnWZj684pcXmK2SxYIv"`). Inspeccionamos a chamada ao SDK
+    (conftest fixa `"XrExE9yKIg1WjnnlVkGX"`). Inspeccionamos a chamada ao SDK
     e exigimos que o voice ID de referência apareça em kwargs OU num dos
     positional args. Isto evita hard-code acidental dentro do serviço.
     """

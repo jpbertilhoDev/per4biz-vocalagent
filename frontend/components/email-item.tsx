@@ -21,33 +21,40 @@ export function EmailItem({ email }: EmailItemProps) {
       data-testid="email-item"
       onClick={() => router.push(`/email/${email.id}`)}
       className={cn(
-        "flex w-full items-start gap-3 border-b border-neutral-200 px-4 py-3 text-left transition-colors",
-        "hover:bg-neutral-50 active:bg-neutral-100",
-        "dark:border-neutral-800 dark:hover:bg-neutral-900 dark:active:bg-neutral-800",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A84FF]",
+        "flex w-full items-start gap-3.5 px-5 py-4 text-left transition-all duration-150",
+        "hover:bg-surface active:bg-surface-elevated",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
       )}
       aria-label={`${displayName}: ${email.subject}${email.is_unread ? " (não lido)" : ""}`}
     >
-      {/* Avatar */}
       <div
         aria-hidden
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-200 font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200"
+        className={cn(
+          "mt-0.5 h-10 w-1 shrink-0 rounded-full",
+          email.is_unread ? "bg-primary" : "bg-divider",
+        )}
+      />
+
+      <div
+        aria-hidden
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface-elevated text-sm font-semibold text-text-secondary ring-1 ring-divider/60"
       >
         {initial}
       </div>
 
-      {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span
             className={cn(
               "truncate text-sm",
-              email.is_unread ? "font-semibold" : "font-normal",
+              email.is_unread
+                ? "font-semibold text-text-primary"
+                : "font-normal text-text-secondary",
             )}
           >
             {displayName}
           </span>
-          <span className="shrink-0 text-xs text-neutral-500">
+          <span className="shrink-0 text-[11px] tabular-nums text-text-tertiary">
             {formatRelativeTime(email.received_at)}
           </span>
         </div>
@@ -55,21 +62,22 @@ export function EmailItem({ email }: EmailItemProps) {
           className={cn(
             "truncate text-sm",
             email.is_unread
-              ? "font-semibold"
-              : "text-neutral-800 dark:text-neutral-200",
+              ? "font-semibold text-text-primary"
+              : "text-text-secondary",
           )}
         >
           {email.subject || "(sem assunto)"}
         </div>
-        <div className="truncate text-xs text-neutral-500">{email.snippet}</div>
+        <div className="mt-0.5 truncate text-xs text-text-tertiary">
+          {email.snippet}
+        </div>
       </div>
 
-      {/* Unread dot */}
       {email.is_unread && (
         <div
           data-testid="unread-dot"
           aria-hidden
-          className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#0A84FF]"
+          className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-voice shadow-[0_0_8px_rgba(0,206,255,0.4)]"
         />
       )}
     </button>

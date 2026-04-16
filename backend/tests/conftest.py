@@ -1,4 +1,5 @@
 """Shared pytest fixtures for Per4Biz backend."""
+
 import os
 
 import pytest
@@ -21,7 +22,7 @@ def _set_test_env() -> None:
         # Voice ID público de referência (Sprint 2 · E4 · Task 5/6). Conftest
         # define-o mesmo sendo opcional em Settings, para que testes de
         # `voice_tts` possam inspecionar o kwarg sem depender de .env real.
-        "ELEVENLABS_VOICE_ID": "JGnWZj684pcXmK2SxYIv",
+        "ELEVENLABS_VOICE_ID": "XrExE9yKIg1WjnnlVkGX",
         # base64(b"x" * 32) — decodes to exactly 32 bytes (AES-256 key size).
         # Deterministic for reproducible tests; replace before prod.
         "ENCRYPTION_KEY": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",  # noqa: S105

@@ -42,6 +42,7 @@ Flags para o specialist (Task 4):
       (tudo PII — LOGGING-POLICY.md). Log apenas `model_ms` + flags
       de comprimento se necessário.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -54,9 +55,7 @@ from pytest_mock import MockerFixture
 # Constantes / fixtures inline
 # ---------------------------------------------------------------------------
 
-FAKE_POLISHED = (
-    "Caro João,\n\nConfirmo a reunião de terça às 15h.\n\nCumprimentos"
-)
+FAKE_POLISHED = "Caro João,\n\nConfirmo a reunião de terça às 15h.\n\nCumprimentos"
 
 TRANSCRIPT = "responde ao joão a confirmar a reunião terça 15h"
 
@@ -155,9 +154,7 @@ def test_polish_uses_email_context_in_prompt(mocker: MockerFixture) -> None:
     assert "user" in roles, "prompt deve incluir role=user"
 
     # Contexto injetado — pelo menos from_name ou subject deve aparecer
-    concat = "\n".join(
-        str(m.get("content", "")) for m in messages if isinstance(m, dict)
-    )
+    concat = "\n".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
     assert ("João Silva" in concat) or ("Reunião" in concat), (
         "prompt não injeta from_name nem subject — contexto do email perdido"
     )
@@ -168,15 +165,17 @@ def test_polish_handles_groq_error(mocker: MockerFixture) -> None:
 
     O router `/voice/polish` (Task 7+) mapeia qualquer exceção do SDK em
     HTTP 502 com `error_code=voice.llm_upstream` (ERROR-MATRIX §voice).
-    O serviço em si propaga sem wrappar.
+    O serviço em si propaga sem wrappar (após retry attempts).
     """
     groq_client = MagicMock(name="groq_llm_client")
     groq_client.chat.completions.create.side_effect = Exception("rate limit")
     mocker.patch("app.services.voice_llm.Groq", return_value=groq_client)
+    mocker.patch("app.services.retry.time.sleep")  # skip real delays
 
     from app.services.voice_llm import polish_draft
 
     with pytest.raises(Exception, match=r"rate limit"):
         polish_draft(TRANSCRIPT, CONTEXT)
 
-    groq_client.chat.completions.create.assert_called_once()
+    # With retry (max_retries=2), the function is called 3 times total
+    assert groq_client.chat.completions.create.call_count == 3

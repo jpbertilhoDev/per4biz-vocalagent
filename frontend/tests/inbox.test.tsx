@@ -32,7 +32,7 @@ vi.mock("@/lib/queries", async (importOriginal) => {
   return { ...actual, listEmails: vi.fn() };
 });
 import { listEmails } from "@/lib/queries";
-import InboxPage from "@/app/inbox/page";
+import InboxPage from "@/app/(app)/inbox/page";
 
 const listEmailsMock = vi.mocked(listEmails);
 

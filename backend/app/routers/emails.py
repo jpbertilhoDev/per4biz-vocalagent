@@ -24,20 +24,21 @@ Invariantes (CLAUDE.md §3 + LOGGING-POLICY):
     - Zero logs de subjects / bodies / emails. Apenas contagens e flags.
     - `current_user` dep converte ausência de cookie em 401 (AC-6).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from google.auth.exceptions import RefreshError
 from pydantic import BaseModel, EmailStr, Field
 
 from app.deps import current_user
 from app.logging import get_logger
-from app.middleware.session import SESSION_COOKIE
 from app.services import gmail, supabase_client
+from app.services.auth_helpers import invalid_grant_response as _invalid_grant_response
 
 logger = get_logger(__name__)
 
@@ -179,37 +180,4 @@ def send_email(
     return result
 
 
-def _invalid_grant_response(user_sub: str) -> Response:
-    """AC-2.7: apaga `google_accounts`, devolve 401 e invalida cookie.
-
-    Usamos `JSONResponse` directa (em vez de `HTTPException`) porque
-    precisamos de anexar `Set-Cookie __Host-session=; Max-Age=0` à mesma
-    response que transporta o 401. `HTTPException` descarta qualquer
-    `Response` injectada via dependency e não aceita headers arbitrários
-    de cookie clear.
-
-    Cleanup do DB é best-effort — falha Supabase não deve bloquear o 401
-    (o re-login seguinte recria a row correctamente).
-    """
-    try:
-        sb = supabase_client.get_supabase_admin()
-        sb.table("google_accounts").delete().eq("user_id", user_sub).execute()
-    except Exception as exc:  # noqa: BLE001 — cleanup best-effort; qualquer falha Supabase não deve bloquear 401
-        logger.warning(
-            "emails.invalid_grant.cleanup_failed",
-            error_type=type(exc).__name__,
-        )
-
-    response = JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"detail": "Google access revoked"},
-    )
-    response.delete_cookie(
-        key=SESSION_COOKIE,
-        path="/",
-        secure=True,
-        httponly=True,
-        samesite="lax",
-    )
-    logger.info("emails.invalid_grant.cleanup_done")
-    return response
+# _invalid_grant_response imported from app.services.auth_helpers

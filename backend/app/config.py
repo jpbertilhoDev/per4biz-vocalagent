@@ -4,6 +4,7 @@ Configurações Per4Biz backend — Pydantic Settings.
 Lê do ambiente (.env em dev, secrets em Fly.io).
 Ver 07-v1-scope/EXECUTION-NOTES.md §4 para o que é obrigatório em V1.
 """
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -48,7 +49,7 @@ class Settings(BaseSettings):
 
     # --- ElevenLabs (TTS) ---
     ELEVENLABS_API_KEY: str
-    ELEVENLABS_VOICE_ID: str = ""  # definido no Sprint 2
+    ELEVENLABS_VOICE_ID: str = "XrExE9yKIg1WjnnlVkGX"
     ELEVENLABS_MODEL_ID: str = "eleven_multilingual_v2"
 
     # --- Encryption (AES-256-GCM) ---
@@ -69,8 +70,8 @@ class Settings(BaseSettings):
     FEATURE_VOICE_AGENT_ENABLED: bool = True
     FEATURE_MULTI_ACCOUNT_ENABLED: bool = False
     FEATURE_PUSH_NOTIFICATIONS_ENABLED: bool = False
-    FEATURE_CALENDAR_ENABLED: bool = False
-    FEATURE_CONTACTS_ENABLED: bool = False
+    FEATURE_CALENDAR_ENABLED: bool = True
+    FEATURE_CONTACTS_ENABLED: bool = True
     FEATURE_TRANSCRIPT_RETENTION: bool = False
 
     @property

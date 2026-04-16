@@ -14,6 +14,7 @@ Regras:
 - Qualquer exceção do SDK propaga raw; router `/voice/tts` (Task 6) traduz em
   502 com `error_code=voice.tts_upstream` (ERROR-MATRIX §voice).
 """
+
 from __future__ import annotations
 
 import time
@@ -23,10 +24,12 @@ from elevenlabs.client import ElevenLabs
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
 
 MAX_TEXT_CHARS = 5000  # SPEC §3 / RF-V.3 — limite duro de input
+_HTTP_TIMEOUT = 30.0
 
 
 def synthesize(text: str, voice_id: str | None = None) -> dict[str, Any]:
@@ -48,19 +51,18 @@ def synthesize(text: str, voice_id: str | None = None) -> dict[str, Any]:
         Exception: propagado do SDK (router traduz em 502).
     """
     if len(text) > MAX_TEXT_CHARS:
-        raise ValueError(
-            f"text too long: {len(text)} chars > {MAX_TEXT_CHARS}"
-        )
+        raise ValueError(f"text too long: {len(text)} chars > {MAX_TEXT_CHARS}")
 
     settings = get_settings()
     effective_voice_id = voice_id or settings.ELEVENLABS_VOICE_ID
     if not effective_voice_id:
         raise ValueError("voice_id required but not provided or configured")
 
-    client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY)
+    client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY, timeout=_HTTP_TIMEOUT)
 
     t0 = time.monotonic()
-    stream = client.text_to_speech.convert(
+    stream = retry_with_backoff(
+        client.text_to_speech.convert,
         voice_id=effective_voice_id,
         model_id=settings.ELEVENLABS_MODEL_ID,
         text=text,

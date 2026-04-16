@@ -23,8 +23,11 @@ from groq import Groq
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
+
+_HTTP_TIMEOUT = 30.0
 
 # Janela máxima do corpo do email injetada no prompt. Evita estourar o
 # context window do Llama e mantém latência previsível (< 1.2s first-token).
@@ -73,7 +76,7 @@ def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
         Exception: qualquer erro do SDK Groq propaga raw (router traduz 502).
     """
     settings = get_settings()
-    client = Groq(api_key=settings.GROQ_API_KEY)
+    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
 
     from_name = context.get("from_name") or context.get("from_email", "")
     subject = context.get("subject", "")
@@ -89,7 +92,8 @@ def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
     )
 
     t0 = time.monotonic()
-    response = client.chat.completions.create(
+    response = retry_with_backoff(
+        client.chat.completions.create,
         model=settings.GROQ_LLM_MODEL,
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},

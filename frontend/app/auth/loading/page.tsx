@@ -1,12 +1,7 @@
 "use client";
 
 /**
- * Auth loading splash (Sprint 1 · E1).
- * Intermediário opcional entre OAuth callback e /inbox.
- * Ver specs/e1-auth-google-oauth/SPEC.md §6.
- *
- * Client component porque precisa de setTimeout + router.replace().
- * router.replace (não push) para não poluir histórico.
+ * Auth loading splash — redirects to /chat (chat-first home).
  */
 
 import { useEffect } from "react";
@@ -17,7 +12,7 @@ export default function AuthLoadingPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace("/inbox");
+      router.replace("/chat");
     }, 2000);
     return () => clearTimeout(timer);
   }, [router]);
@@ -26,18 +21,20 @@ export default function AuthLoadingPage() {
     <main
       role="status"
       aria-live="polite"
-      aria-label="A preparar a tua caixa de email"
+      aria-label="A preparar o Vox"
       className="flex min-h-screen flex-col items-center justify-center gap-6 px-6"
       style={{ paddingBottom: "max(3rem, env(safe-area-inset-bottom))" }}
     >
       <div
         aria-hidden
-        className="h-16 w-16 rounded-2xl bg-[#0A84FF] shadow-lg"
-      />
+        className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 shadow-lg shadow-primary/20"
+      >
+        <span className="hero-gradient-text text-2xl font-bold">V</span>
+      </div>
       <div className="flex flex-col items-center gap-3">
         <Spinner />
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          A preparar a tua caixa…
+        <p className="text-sm text-text-secondary">
+          A preparar o Vox…
         </p>
       </div>
     </main>
@@ -47,7 +44,7 @@ export default function AuthLoadingPage() {
 function Spinner() {
   return (
     <svg
-      className="h-8 w-8 animate-spin text-[#0A84FF]"
+      className="h-8 w-8 animate-spin text-primary"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"

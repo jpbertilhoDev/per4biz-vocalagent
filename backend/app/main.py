@@ -3,6 +3,7 @@ Per4Biz FastAPI application entry point.
 
 V1 single-tenant — ver 07-v1-scope/EXECUTION-NOTES.md.
 """
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,8 @@ from app.routers import auth as auth_router
 from app.routers import emails as emails_router
 from app.routers import me as me_router
 from app.routers import voice as voice_router
+from app.routers import calendar as calendar_router
+from app.routers import contacts as contacts_router
 
 
 @asynccontextmanager
@@ -70,8 +73,8 @@ def create_app() -> FastAPI:
     app.include_router(me_router.router)  # Sprint 1 (E1) — GDPR trilogy
     app.include_router(emails_router.router)  # Sprint 1.x (E2) — Gmail inbox
     app.include_router(voice_router.router)  # Sprint 2 (E4) — voice pipeline
-    # Routers seguintes (próximos sprints):
-    # app.include_router(accounts.router) # Sprint 4 (E6)
+    app.include_router(calendar_router.router)  # Sprint 4 — Calendar
+    app.include_router(contacts_router.router)  # Sprint 4 — Contacts
 
     return app
 

@@ -24,23 +24,22 @@ export default function InboxPage() {
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
-      <main className="flex min-h-screen flex-col bg-white dark:bg-neutral-950">
+      <div className="flex min-h-screen flex-col bg-background">
         <header
-          className="sticky top-0 z-10 border-b border-neutral-200 bg-white/90 px-4 py-4 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90"
+          className="glass-frost sticky top-0 z-10 border-b border-divider px-4 py-4"
           style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
         >
-          <h1 className="text-2xl font-bold tracking-tight">Caixa de entrada</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+            Inbox
+          </h1>
           {!isLoading && !isError && emails.length > 0 && (
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-text-tertiary">
               {unreadCount} não {unreadCount === 1 ? "lido" : "lidos"}
             </p>
           )}
         </header>
 
-        <section
-          className="flex-1"
-          style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
-        >
+        <section className="flex-1">
           {isLoading && (
             <>
               <EmailSkeleton />
@@ -52,7 +51,7 @@ export default function InboxPage() {
           {isError && (
             <div
               role="alert"
-              className="mx-4 mt-8 rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+              className="mx-4 mt-8 rounded-xl bg-error/10 p-4 text-sm text-error"
             >
               <p className="mb-3">Não foi possível carregar os emails.</p>
               <Button
@@ -67,7 +66,7 @@ export default function InboxPage() {
 
           {!isLoading && !isError && emails.length === 0 && (
             <div className="flex flex-1 flex-col items-center justify-center py-24 text-center">
-              <p className="text-neutral-500">Sem emails</p>
+              <p className="text-text-tertiary">Sem emails</p>
             </div>
           )}
 
@@ -81,7 +80,7 @@ export default function InboxPage() {
             </ul>
           )}
         </section>
-      </main>
+      </div>
     </PullToRefresh>
   );
 }

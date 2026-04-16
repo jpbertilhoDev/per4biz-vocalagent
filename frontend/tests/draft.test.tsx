@@ -116,8 +116,8 @@ describe("DraftPage", () => {
     await waitFor(() => {
       const pushed = pushMock.mock.calls.map((c) => String(c[0] ?? ""));
       expect(
-        pushed.some((url) => url === "/inbox" || url.startsWith("/inbox?")),
-        `expected navigation to "/inbox" after send, got: ${JSON.stringify(
+        pushed.some((url) => url === "/chat" || url.startsWith("/chat?")),
+        `expected navigation to "/chat" after send, got: ${JSON.stringify(
           pushed,
         )}`,
       ).toBe(true);

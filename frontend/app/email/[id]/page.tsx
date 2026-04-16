@@ -122,17 +122,12 @@ export default function EmailDetailPage() {
   const isBusy = processing !== "idle";
 
   return (
-    <main className="flex min-h-screen flex-col bg-white dark:bg-neutral-950">
+    <div className="flex min-h-screen flex-col bg-background">
       <header
-        className="sticky top-0 z-10 border-b border-neutral-200 bg-white/90 px-2 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90"
+        className="glass-frost sticky top-0 z-10 border-b border-divider px-2 py-3"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        <Button
-          variant="ghost"
-          size="default"
-          onClick={handleBack}
-          aria-label="Voltar"
-        >
+        <Button variant="ghost" size="default" onClick={handleBack} aria-label="Voltar">
           <ArrowLeft className="h-5 w-5" />
           <span>Voltar</span>
         </Button>
@@ -147,7 +142,7 @@ export default function EmailDetailPage() {
         {isError && (
           <div
             role="alert"
-            className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+            className="rounded-xl bg-error/10 p-4 text-sm text-error"
           >
             <p className="mb-3">Não foi possível carregar o email.</p>
             <Button variant="destructive" size="sm" onClick={() => refetch()}>
@@ -159,20 +154,20 @@ export default function EmailDetailPage() {
         {data && (
           <article className="space-y-4">
             <header className="space-y-1">
-              <h1 className="text-xl font-bold tracking-tight">
+              <h1 className="text-xl font-bold tracking-tight text-text-primary">
                 {data.subject || "(sem assunto)"}
               </h1>
-              <p className="text-sm font-medium">
+              <p className="text-sm font-medium text-text-primary">
                 {data.from_name ?? data.from_email}
               </p>
               {data.from_name && (
-                <p className="text-xs text-neutral-500">{data.from_email}</p>
+                <p className="text-xs text-text-tertiary">{data.from_email}</p>
               )}
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-text-tertiary">
                 {formatRelativeTime(data.received_at)}
               </p>
             </header>
-            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-text-secondary">
               {data.body_text || "(sem conteúdo)"}
             </div>
           </article>
@@ -181,7 +176,7 @@ export default function EmailDetailPage() {
 
       {data && (
         <footer
-          className="sticky bottom-0 border-t border-neutral-200 bg-white/95 p-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95"
+          className="glass-frost sticky bottom-0 border-t border-divider p-3"
           style={{
             paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
           }}
@@ -189,7 +184,7 @@ export default function EmailDetailPage() {
           {voiceError && (
             <div
               role="alert"
-              className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300"
+              className="mb-2 rounded-lg bg-error/10 p-2 text-xs text-error"
             >
               {voiceError}
             </div>
@@ -225,21 +220,21 @@ export default function EmailDetailPage() {
         onOpenChange={setRecordOpen}
         onRecorded={handleRecorded}
       />
-    </main>
+    </div>
   );
 }
 
 function DetailSkeleton() {
   return (
     <div className="space-y-4" aria-hidden>
-      <div className="h-6 w-3/4 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-      <div className="h-4 w-1/3 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-      <div className="h-4 w-1/4 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
+      <div className="h-6 w-3/4 animate-pulse rounded bg-surface-elevated" />
+      <div className="h-4 w-1/3 animate-pulse rounded bg-surface-elevated" />
+      <div className="h-4 w-1/4 animate-pulse rounded bg-surface-elevated" />
       <div className="space-y-2 pt-2">
-        <div className="h-3 w-full animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-        <div className="h-3 w-full animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-        <div className="h-3 w-11/12 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-        <div className="h-3 w-4/5 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
+        <div className="h-3 w-full animate-pulse rounded bg-surface-elevated" />
+        <div className="h-3 w-full animate-pulse rounded bg-surface-elevated" />
+        <div className="h-3 w-11/12 animate-pulse rounded bg-surface-elevated" />
+        <div className="h-3 w-4/5 animate-pulse rounded bg-surface-elevated" />
       </div>
     </div>
   );

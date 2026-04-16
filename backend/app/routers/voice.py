@@ -19,6 +19,7 @@ Invariantes (CLAUDE.md §3 + LOGGING-POLICY):
     - Fail-fast (`ValueError` dos services) traduz em 413 para áudio
       oversize e 400 para texto oversize / voice_id em falta.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -29,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from app.deps import current_user
 from app.logging import get_logger
-from app.services import voice_llm, voice_stt, voice_tts
+from app.services import voice_llm, voice_stt, voice_tts, voice_intent
 
 logger = get_logger(__name__)
 
@@ -67,6 +68,12 @@ class TTSRequest(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=_MAX_TTS_TEXT_CHARS)
     voice_id: str | None = None
+
+
+class IntentRequest(BaseModel):
+    """Body de `POST /voice/intent` — classifies user transcript into action."""
+
+    transcript: str = Field(..., min_length=1, max_length=2000)
 
 
 @router.post("/transcribe")
@@ -192,3 +199,31 @@ def tts(
         yield audio_bytes
 
     return StreamingResponse(_iter_audio(), media_type=mime)
+
+
+@router.post("/intent")
+def intent(
+    req: IntentRequest,
+    user: dict[str, Any] = _CurrentUser,
+) -> dict[str, Any]:
+    """Classify user voice transcript into an intent for Vox routing.
+
+    Returns:
+        - 200 OK: `{intent, params, model_ms}`
+        - 401: cookie ausente/inválido.
+        - 502: falha upstream Groq.
+    """
+    try:
+        result = voice_intent.classify_intent(req.transcript)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "voice.intent.upstream_fail",
+            error_type=type(exc).__name__,
+            user_sub=user["sub"],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="voice.llm_upstream",
+        ) from exc
+    logger.info("voice.intent.ok", user_sub=user["sub"], intent=result.get("intent"))
+    return result

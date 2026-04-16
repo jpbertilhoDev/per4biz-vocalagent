@@ -41,6 +41,7 @@ Flags para o specialist (Task 2):
     - **Nunca logar `text`** (transcript = PII). Log apenas `duration_ms` +
       tamanho em bytes (ver LOGGING-POLICY.md).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -146,23 +147,17 @@ def test_handles_groq_api_error(mocker: MockerFixture) -> None:
 
     O router `/voice/transcribe` (Task 7) mapeia `groq.APIError` → HTTP 502
     com `error_code=voice.stt_upstream` (ver ERROR-MATRIX.md §voice).
-    O serviço em si não deve esconder/wrappar — propaga raw.
+    O serviço em si não deve esconder/wrappar — propaga raw (após retry).
     """
     groq_client = MagicMock(name="groq_client")
-    # Simulamos APIError como Exception genérica — import real de
-    # `groq.APIError` é evitado para manter o teste RED resistente a
-    # mudanças de path interno do SDK. O contrato é "qualquer exceção
-    # do SDK propaga". Task 2 pode refinar para `groq.APIError` se preferir.
-    groq_client.audio.transcriptions.create.side_effect = Exception(
-        "groq upstream unavailable"
-    )
+    groq_client.audio.transcriptions.create.side_effect = Exception("groq upstream unavailable")
     mocker.patch("app.services.voice_stt.Groq", return_value=groq_client)
+    mocker.patch("app.services.retry.time.sleep")  # skip real delays
 
     from app.services.voice_stt import transcribe
 
     with pytest.raises(Exception, match=r"groq upstream unavailable"):
         transcribe(b"audio_ok_size", "audio/webm")
 
-    # A chamada foi efectivamente feita antes do erro (não é um short-circuit
-    # de validação local)
-    groq_client.audio.transcriptions.create.assert_called_once()
+    # With retry (max_retries=2), the function is called 3 times total
+    assert groq_client.audio.transcriptions.create.call_count == 3

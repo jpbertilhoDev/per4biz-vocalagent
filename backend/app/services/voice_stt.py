@@ -12,6 +12,7 @@ Regras:
 - `groq.APIError` propaga raw; router `/voice/transcribe` traduz em 502
   (ERROR-MATRIX §voice).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,10 +21,12 @@ from groq import Groq
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
 
 MAX_AUDIO_BYTES = 1_048_576  # 1 MiB — SPEC §3 / RF-V.1
+_HTTP_TIMEOUT = 30.0
 
 
 def transcribe(audio_bytes: bytes, mime: str = "audio/webm") -> dict[str, Any]:
@@ -44,14 +47,13 @@ def transcribe(audio_bytes: bytes, mime: str = "audio/webm") -> dict[str, Any]:
         groq.APIError: propagado do SDK (router traduz em 502).
     """
     if len(audio_bytes) > MAX_AUDIO_BYTES:
-        raise ValueError(
-            f"audio too large: {len(audio_bytes)} bytes > {MAX_AUDIO_BYTES}"
-        )
+        raise ValueError(f"audio too large: {len(audio_bytes)} bytes > {MAX_AUDIO_BYTES}")
 
     settings = get_settings()
-    client = Groq(api_key=settings.GROQ_API_KEY)
+    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
 
-    result = client.audio.transcriptions.create(
+    result = retry_with_backoff(
+        client.audio.transcriptions.create,
         file=("audio.webm", audio_bytes, mime),
         model=settings.GROQ_STT_MODEL,
         response_format="verbose_json",

@@ -1,44 +1,50 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #1c1c1e;
-  --color-surface: #f2f2f7;
-  --color-divider: #e5e5ea;
+  --color-background: #0a0a0f;
+  --color-foreground: #f0f0f5;
+  --color-surface: #14141b;
+  --color-surface-elevated: #1e1e28;
+  --color-surface-frost: #1e1e28;
+  --color-divider: #2a2a35;
 
-  --color-primary: #0a84ff;
-  --color-primary-hover: #0064d0;
-  --color-accent: #ff375f;
-  --color-success: #34c759;
-  --color-error: #ff3b30;
-  --color-warning: #ff9500;
+  --color-primary: #6c5ce7;
+  --color-primary-hover: #7d6ff0;
+  --color-primary-muted: rgba(108, 92, 231, 0.2);
+  --color-voice: #00ceff;
+  --color-voice-muted: rgba(0, 206, 255, 0.2);
+  --color-accent: #6c5ce7;
+  --color-success: #34d399;
+  --color-error: #ff453a;
+  --color-warning: #f59e0b;
+
+  --color-text-primary: #f0f0f5;
+  --color-text-secondary: #9090a0;
+  --color-text-tertiary: #5a5a6e;
+  --color-text-inverse: #ffffff;
 
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "SF Mono", "Fira Code",
+    "Cascadia Code", monospace;
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
   --radius-pill: 9999px;
-}
 
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-background: #000000;
-    --color-foreground: #ffffff;
-    --color-surface: #1c1c1e;
-    --color-divider: #2c2c2e;
-    --color-accent: #ff6482;
-    --color-success: #30d158;
-    --color-error: #ff453a;
-  }
+  --shadow-elevation-1: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-elevation-2: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow-primary: 0 0 24px rgba(108, 92, 231, 0.25);
+  --shadow-glow-voice: 0 0 24px rgba(0, 206, 255, 0.35);
 }
 
 html {
   height: 100%;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  color-scheme: dark;
 }
 
 body {
@@ -47,9 +53,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: none;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
 }
 
-/* Safe areas iOS — PWA standalone */
 @supports (padding: env(safe-area-inset-top)) {
   body {
     padding-top: env(safe-area-inset-top);
@@ -59,7 +66,6 @@ body {
   }
 }
 
-/* Respeitar prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -69,4 +75,68 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(0, 206, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(0, 206, 255, 0.6);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 250ms ease-out forwards;
+}
+
+.glass-frost {
+  background: rgba(14, 14, 20, 0.82);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+}
+
+.glass-card {
+  background: rgba(30, 30, 40, 0.55);
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  border: 1px solid rgba(108, 92, 231, 0.08);
+}
+
+.hero-gradient {
+  background: linear-gradient(135deg, #6c5ce7, #00ceff);
+}
+
+.hero-gradient-text {
+  background: linear-gradient(135deg, #6c5ce7, #00ceff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(108, 92, 231, 0.06) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
 }

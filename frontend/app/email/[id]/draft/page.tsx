@@ -37,7 +37,7 @@ export default function DraftPage() {
           in_reply_to: inReplyTo ?? null,
         }),
       });
-      router.push("/inbox?sent=1");
+      router.push("/chat?sent=1");
     } catch {
       setError("Não foi possível enviar. Tenta de novo.");
       setSending(false);
@@ -67,9 +67,9 @@ export default function DraftPage() {
   const canSend = body.trim().length > 0 && !sending;
 
   return (
-    <main className="flex min-h-screen flex-col bg-white dark:bg-neutral-950">
+    <div className="flex min-h-screen flex-col bg-background">
       <header
-        className="sticky top-0 z-10 border-b border-neutral-200 bg-white/90 px-2 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90"
+        className="glass-frost sticky top-0 z-10 border-b border-divider px-2 py-3"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
         <Button variant="ghost" onClick={() => router.back()} aria-label="Voltar">
@@ -79,14 +79,14 @@ export default function DraftPage() {
       </header>
 
       <section className="flex-1 space-y-4 px-4 py-4">
-        <div className="space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="space-y-1 rounded-xl border border-divider bg-surface p-3 text-sm">
           <div>
-            <span className="text-neutral-500">Para:</span>{" "}
-            <span className="font-medium">{to}</span>
+            <span className="text-text-tertiary">Para:</span>{" "}
+            <span className="font-medium text-text-primary">{to}</span>
           </div>
           <div>
-            <span className="text-neutral-500">Assunto:</span>{" "}
-            <span className="font-medium">{subject}</span>
+            <span className="text-text-tertiary">Assunto:</span>{" "}
+            <span className="font-medium text-text-primary">{subject}</span>
           </div>
         </div>
 
@@ -100,14 +100,14 @@ export default function DraftPage() {
           onChange={(e) => setBody(e.target.value)}
           rows={12}
           disabled={sending || reDictating}
-          className="w-full rounded-xl border border-neutral-300 p-3 text-base leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A84FF] dark:border-neutral-700 dark:bg-neutral-900"
+          className="w-full rounded-xl border border-divider bg-surface p-3 text-base leading-relaxed text-text-primary placeholder:text-text-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           placeholder="Escreve a tua resposta..."
         />
 
         {error && (
           <div
             role="alert"
-            className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+            className="rounded-lg bg-error/10 p-3 text-sm text-error"
           >
             {error}
           </div>
@@ -115,7 +115,7 @@ export default function DraftPage() {
       </section>
 
       <footer
-        className="sticky bottom-0 border-t border-neutral-200 bg-white/95 p-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95"
+        className="glass-frost sticky bottom-0 border-t border-divider p-3"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
         <div className="grid grid-cols-2 gap-2">
@@ -140,6 +140,6 @@ export default function DraftPage() {
         onOpenChange={setRecordOpen}
         onRecorded={handleReRecorded}
       />
-    </main>
+    </div>
   );
 }
