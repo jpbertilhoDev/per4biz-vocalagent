@@ -1,8 +1,8 @@
-# Per4Biz API — Fly.io Madrid deployment
+# Per4Biz API — Fly.io Paris deployment
 # https://fly.io/docs/reference/configuration/
 
 app = "per4biz-api"
-primary_region = "mad"  # Madrid — ~15ms de Lisboa
+primary_region = "cdg"  # Paris — Madrid foi deprecated pela Fly; Paris ~25ms de Lisboa
 
 [build]
   dockerfile = "Dockerfile"
