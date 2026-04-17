@@ -1,8 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, Clock, MapPin, Users, LogIn, AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
 import {
   listCalendarEvents,
@@ -98,8 +98,15 @@ function handleReAuth() {
 }
 
 export default function AgendaPage() {
-  const now = new Date().toISOString();
-  const weekLater = new Date(Date.now() + 7 * 86400000).toISOString();
+  // Stable range anchored at mount — re-computing on every render flipped the
+  // queryKey each time and put React Query in a perpetual loading loop.
+  const { now, weekLater } = useMemo(() => {
+    const nowDate = new Date();
+    return {
+      now: nowDate.toISOString(),
+      weekLater: new Date(nowDate.getTime() + 7 * 86400000).toISOString(),
+    };
+  }, []);
 
   const { data, isLoading, error } = useQuery({
     queryKey: calendarKeys.events(now, weekLater),
