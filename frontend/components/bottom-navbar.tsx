@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import { MessageCircle, Inbox, Calendar, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,12 +19,10 @@ export function BottomNavbar() {
   return (
     <nav
       aria-label="Navegação principal"
-      className="glass-frost fixed right-0 bottom-0 left-0 z-50 border-t border-divider/50"
+      className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <ul
-        className="mx-auto flex h-16 max-w-lg items-center justify-around px-2"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
+      <ul className="glass-frost mx-auto flex w-full max-w-[22rem] items-center justify-between gap-1 rounded-[28px] px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
         {tabs.map((tab) => {
           const isActive =
             pathname === tab.href ||
@@ -31,22 +30,36 @@ export function BottomNavbar() {
           const Icon = tab.icon;
 
           return (
-            <li key={tab.href}>
+            <li key={tab.href} className="flex-1">
               <Link
                 href={tab.href}
                 aria-label={tab.label}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-2xl px-4 py-2 transition-all duration-200",
+                  "relative flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 transition-colors duration-200",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-text-tertiary hover:text-text-secondary",
+                    ? "text-[color:var(--primary)]"
+                    : "text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]",
                 )}
               >
-                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.2 : 1.5} />
+                {isActive && (
+                  <motion.span
+                    layoutId="navbar-indicator"
+                    className="absolute inset-0 rounded-2xl"
+                    style={{
+                      background: "var(--primary-soft)",
+                      boxShadow: "inset 0 0 0 1px rgba(108, 92, 231, 0.22)",
+                    }}
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <Icon
+                  className="relative z-10 h-5 w-5"
+                  strokeWidth={isActive ? 2.2 : 1.5}
+                />
                 <span
                   className={cn(
-                    "text-[10px] leading-none",
+                    "relative z-10 text-[10px] leading-none tracking-[0.02em]",
                     isActive ? "font-semibold" : "font-medium",
                   )}
                 >

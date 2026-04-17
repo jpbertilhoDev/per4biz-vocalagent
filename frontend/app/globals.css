@@ -2,31 +2,33 @@
 
 @theme {
   --color-background: #0a0a0f;
-  --color-foreground: #f0f0f5;
-  --color-surface: #14141b;
-  --color-surface-elevated: #1e1e28;
-  --color-surface-frost: #1e1e28;
-  --color-divider: #2a2a35;
+  --color-foreground: #f5f3ed;
+  --color-surface: #141422;
+  --color-surface-elevated: #141422;
+  --color-surface-frost: #141422;
+  --color-divider: rgba(245, 243, 237, 0.06);
+  --color-hairline: rgba(245, 243, 237, 0.08);
 
   --color-primary: #6c5ce7;
   --color-primary-hover: #7d6ff0;
-  --color-primary-muted: rgba(108, 92, 231, 0.2);
+  --color-primary-muted: rgba(108, 92, 231, 0.12);
   --color-voice: #00ceff;
-  --color-voice-muted: rgba(0, 206, 255, 0.2);
+  --color-voice-muted: rgba(0, 206, 255, 0.14);
   --color-accent: #6c5ce7;
   --color-success: #34d399;
-  --color-error: #ff453a;
+  --color-error: #ff6b6b;
   --color-warning: #f59e0b;
 
-  --color-text-primary: #f0f0f5;
-  --color-text-secondary: #9090a0;
-  --color-text-tertiary: #5a5a6e;
+  --color-text-primary: #f5f3ed;
+  --color-text-secondary: #8b8896;
+  --color-text-tertiary: #5a5865;
   --color-text-inverse: #ffffff;
 
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), "SF Mono", "Fira Code",
-    "Cascadia Code", monospace;
+  --font-sans: var(--font-geist-sans), var(--font-inter), -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), var(--font-jetbrains-mono), "SF Mono",
+    "Fira Code", "Cascadia Code", monospace;
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -38,6 +40,27 @@
   --shadow-elevation-2: 0 8px 32px rgba(0, 0, 0, 0.5);
   --shadow-glow-primary: 0 0 24px rgba(108, 92, 231, 0.25);
   --shadow-glow-voice: 0 0 24px rgba(0, 206, 255, 0.35);
+}
+
+:root {
+  /* Editorial Voice palette — semantic tokens used via CSS var references */
+  --bg-base: #0a0a0f;
+  --surface-elevated: #141422;
+  --surface-glass: rgba(20, 20, 34, 0.72);
+  --text-primary: #f5f3ed;
+  --text-secondary: #8b8896;
+  --text-tertiary: #5a5865;
+  --divider: rgba(245, 243, 237, 0.06);
+  --hairline: rgba(245, 243, 237, 0.08);
+  --primary: #6c5ce7;
+  --primary-soft: rgba(108, 92, 231, 0.12);
+  --voice: #00ceff;
+  --voice-soft: rgba(0, 206, 255, 0.14);
+  --error: #ff6b6b;
+
+  /* Motion easing */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html {
@@ -53,8 +76,66 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: none;
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Grain overlay — fixed, behind everything */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.96  0 0 0 0 0.95  0 0 0 0 0.93  0 0 0 0.08 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+/* Vignette — corner darkening */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+/* Breathing aurora — behind bottom area */
+.aurora-bloom {
+  position: fixed;
+  inset: auto 0 -20% 0;
+  height: 60vh;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 100%,
+    rgba(108, 92, 231, 0.18),
+    transparent 70%
+  );
+  animation: breathe 8s var(--ease-smooth) infinite;
+}
+
+.aurora-bloom.voice-active {
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 100%,
+    rgba(0, 206, 255, 0.24),
+    rgba(108, 92, 231, 0.1) 40%,
+    transparent 75%
+  );
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.08) translateY(-4%);
+    opacity: 1;
+  }
 }
 
 @supports (padding: env(safe-area-inset-top)) {
@@ -98,25 +179,48 @@ body {
   }
 }
 
+@keyframes aurora-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(0, 206, 255, 0),
+      0 0 40px rgba(0, 206, 255, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(0, 206, 255, 0.08),
+      0 0 60px rgba(0, 206, 255, 0.35);
+  }
+}
+
+.mic-aurora {
+  animation: aurora-breathe 3.5s var(--ease-smooth) infinite;
+}
+
 .animate-pulse-glow {
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 250ms ease-out forwards;
+  animation: fade-in-up 380ms var(--ease-spring) both;
 }
 
 .glass-frost {
-  background: rgba(14, 14, 20, 0.82);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  background: var(--surface-glass);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--hairline);
 }
 
 .glass-card {
-  background: rgba(30, 30, 40, 0.55);
-  backdrop-filter: blur(24px) saturate(1.1);
-  -webkit-backdrop-filter: blur(24px) saturate(1.1);
-  border: 1px solid rgba(108, 92, 231, 0.08);
+  background: linear-gradient(
+    180deg,
+    rgba(245, 243, 237, 0.04) 0%,
+    rgba(245, 243, 237, 0.02) 100%
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--hairline);
 }
 
 .hero-gradient {
@@ -124,19 +228,37 @@ body {
 }
 
 .hero-gradient-text {
-  background: linear-gradient(135deg, #6c5ce7, #00ceff);
+  background: linear-gradient(135deg, #00ceff 0%, #6c5ce7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  color: transparent;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 .animate-shimmer {
-  background: linear-gradient(90deg, transparent 0%, rgba(108, 92, 231, 0.06) 50%, transparent 100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(108, 92, 231, 0.06) 50%,
+    transparent 100%
+  );
   background-size: 200% 100%;
   animation: shimmer 2s ease-in-out infinite;
 }

@@ -24,41 +24,49 @@ function formatEventTime(start: string, end: string, isAllDay: boolean): string 
   return `${dateStr}, ${timeStr}`;
 }
 
-function EventCard({ event }: { event: CalendarEvent }) {
+function EventCard({ event, index = 0 }: { event: CalendarEvent; index?: number }) {
   return (
-    <div className="glass-card rounded-2xl p-4 transition-all hover:bg-surface-elevated/80">
+    <div
+      className="glass-card animate-fade-in-up rounded-2xl p-4 transition-colors hover:bg-[color:var(--surface-elevated)]/80"
+      style={{ animationDelay: `${Math.min(index, 10) * 40}ms` }}
+    >
       <div className="mb-2 flex items-start justify-between gap-3">
-        <h3 className="text-sm font-semibold text-text-primary leading-snug">
+        <h3 className="text-[15px] font-semibold leading-snug text-[color:var(--text-primary)]">
           {event.summary || "(sem título)"}
         </h3>
         {!event.is_all_day && (
-          <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
-            {new Date(event.start).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+          <span className="shrink-0 rounded-full bg-[color:var(--primary)]/15 px-2.5 py-0.5 text-[10px] font-medium tabular-nums tracking-[0.04em] text-[color:var(--primary)]">
+            {new Date(event.start).toLocaleTimeString("pt-PT", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </span>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3 text-text-tertiary" />
+      <div className="flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-secondary)]">
+        <span className="flex items-center gap-1.5">
+          <Clock className="h-3 w-3 text-[color:var(--text-tertiary)]" />
           {formatEventTime(event.start, event.end, event.is_all_day)}
         </span>
         {event.location && (
-          <span className="flex items-center gap-1">
-            <MapPin className="h-3 w-3 text-text-tertiary" />
+          <span className="flex items-center gap-1.5">
+            <MapPin className="h-3 w-3 text-[color:var(--text-tertiary)]" />
             {event.location}
           </span>
         )}
         {event.attendees.length > 0 && (
-          <span className="flex items-center gap-1">
-            <Users className="h-3 w-3 text-text-tertiary" />
+          <span className="flex items-center gap-1.5">
+            <Users className="h-3 w-3 text-[color:var(--text-tertiary)]" />
             {event.attendees.length}
           </span>
         )}
       </div>
 
       {event.description && (
-        <p className="mt-2 line-clamp-2 text-xs text-text-tertiary">{event.description}</p>
+        <p className="mt-2 line-clamp-2 text-xs text-[color:var(--text-tertiary)]">
+          {event.description}
+        </p>
       )}
     </div>
   );
@@ -126,21 +134,26 @@ export default function AgendaPage() {
   const apiNotEnabled = isApiNotEnabled(error);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="relative flex min-h-screen flex-col">
       <header
-        className="glass-frost sticky top-0 z-10 px-5 py-4"
-        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+        className="glass-frost sticky top-0 z-10 px-5 pb-4"
+        style={{ paddingTop: "max(2rem, calc(env(safe-area-inset-top) + 2rem))" }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/30">
-              <Calendar className="h-5 w-5 text-primary" strokeWidth={2} />
+        <div className="flex items-end justify-between">
+          <div className="flex items-baseline gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[color:var(--primary)]/15 ring-1 ring-[color:var(--primary)]/25">
+              <Calendar
+                className="h-5 w-5 text-[color:var(--primary)]"
+                strokeWidth={1.8}
+              />
             </div>
-            <div>
-              <h1 className="text-base font-semibold text-text-primary leading-none">
+            <div className="flex flex-col">
+              <h1 className="font-[family-name:var(--font-display)] text-[30px] italic leading-none tracking-[-0.01em] text-[color:var(--text-primary)]">
                 Agenda
               </h1>
-              <span className="text-[10px] text-text-tertiary">Proximos 7 dias</span>
+              <span className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--text-tertiary)]">
+                Próximos 7 dias
+              </span>
             </div>
           </div>
         </div>
@@ -209,27 +222,30 @@ export default function AgendaPage() {
         )}
 
         {!isLoading && !error && events.length === 0 && (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <Calendar className="h-7 w-7 text-primary" strokeWidth={1.5} />
-            </div>
-            <p className="text-sm font-medium text-text-primary">Sem eventos</p>
-            <p className="text-xs text-text-tertiary">
-              Nao tens compromissos nos proximos 7 dias. Diz &quot;agenda&quot; no chat para criares um evento.
+          <div className="flex flex-col items-center gap-3 py-20 text-center">
+            <p className="max-w-[280px] font-[family-name:var(--font-display)] text-[30px] italic leading-[1.15] text-[color:var(--text-primary)]">
+              Nada marcado. A semana é tua.
+            </p>
+            <p className="mt-2 max-w-[260px] text-sm leading-relaxed text-[color:var(--text-secondary)]">
+              Sem eventos nos próximos 7 dias. Diz &quot;agenda&quot; ao Vox para criares um.
             </p>
           </div>
         )}
 
         {!isLoading && !error && events.length > 0 && (
-          <div className="space-y-6">
-            {Object.entries(grouped).map(([dateLabel, dateEvents]) => (
+          <div className="space-y-7">
+            {Object.entries(grouped).map(([dateLabel, dateEvents], groupIdx) => (
               <div key={dateLabel}>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-tertiary">
+                <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--text-tertiary)]">
                   {dateLabel}
                 </h2>
                 <div className="space-y-2.5">
-                  {dateEvents.map((event) => (
-                    <EventCard key={event.id} event={event} />
+                  {dateEvents.map((event, i) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      index={groupIdx * 3 + i}
+                    />
                   ))}
                 </div>
               </div>

@@ -1106,27 +1106,33 @@ export default function ChatPage() {
   }, [emailData?.emails, messages, addVoxCard, updateVoxCard, playTTS, setMicState, recorder, handleReadEmails, handleReplyToEmail, qc]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="relative flex min-h-screen flex-col">
       <header
-        className="glass-frost sticky top-0 z-10 px-5 py-4"
-        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+        className="glass-frost sticky top-0 z-10 px-5 pb-4"
+        style={{ paddingTop: "max(2rem, calc(env(safe-area-inset-top) + 2rem))" }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/30">
-              <span className="hero-gradient-text text-sm font-bold">V</span>
+        <div className="flex items-end justify-between">
+          <div className="flex items-baseline gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[color:var(--primary)]/15 ring-1 ring-[color:var(--primary)]/25">
+              <span className="hero-gradient-text font-[family-name:var(--font-display)] text-[22px] italic leading-none">
+                V
+              </span>
             </div>
-            <div>
-              <h1 className="text-base font-semibold text-text-primary leading-none">Vox</h1>
-              <span className="text-[10px] text-text-tertiary">Agente vocal</span>
+            <div className="flex flex-col">
+              <span className="font-[family-name:var(--font-display)] text-[30px] italic leading-none tracking-[-0.01em] text-[color:var(--text-primary)]">
+                Vox
+              </span>
+              <span className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--text-tertiary)]">
+                Secretário vocal
+              </span>
             </div>
           </div>
           <button
             type="button"
-            className="flex items-center gap-2 rounded-2xl bg-surface-elevated px-4 py-2 text-xs font-medium text-text-secondary ring-1 ring-divider transition-colors hover:text-text-primary"
+            className="flex items-center gap-2 rounded-2xl bg-[color:var(--surface-elevated)]/70 px-3.5 py-2 text-xs font-medium text-[color:var(--text-secondary)] ring-1 ring-[color:var(--hairline)] backdrop-blur transition-colors hover:text-[color:var(--text-primary)]"
             aria-label="Selecionar conta"
           >
-            <span className="h-2 w-2 rounded-full bg-primary" />
+            <span className="h-2 w-2 rounded-full bg-[color:var(--primary)]" />
             <span>Pessoal</span>
             <ChevronDown className="h-3 w-3" />
           </button>
@@ -1145,17 +1151,21 @@ export default function ChatPage() {
 
           return (
             <div key={msg.id} className="flex flex-col items-end animate-fade-in-up">
-              <div className="max-w-[80%] rounded-3xl rounded-br-lg bg-primary/12 px-5 py-3 ring-1 ring-primary/20">
+              <div className="max-w-[80%] rounded-3xl rounded-br-lg bg-[color:var(--primary)]/12 px-5 py-3 ring-1 ring-[color:var(--primary)]/20 backdrop-blur">
                 {msg.isVoice ? (
-                  <p className="font-mono text-sm leading-relaxed text-text-primary">{msg.text}</p>
+                  <p className="font-[family-name:var(--font-mono)] text-[13px] leading-relaxed text-[color:var(--text-primary)]">
+                    {msg.text}
+                  </p>
                 ) : (
-                  <p className="text-sm leading-relaxed text-text-primary">{msg.text}</p>
+                  <p className="text-sm leading-relaxed text-[color:var(--text-primary)]">
+                    {msg.text}
+                  </p>
                 )}
               </div>
               {msg.isVoice ? (
-                <span className="mr-2 mt-1 flex items-center gap-1 text-[10px] text-text-tertiary">
+                <span className="mr-2 mt-1 flex items-center gap-1 text-[10px] text-[color:var(--text-tertiary)]">
                   <Mic
-                    className="h-2.5 w-2.5 text-voice"
+                    className="h-2.5 w-2.5 text-[color:var(--voice)]"
                     strokeWidth={2}
                     aria-label="Transcrito da voz"
                   />
@@ -1164,7 +1174,7 @@ export default function ChatPage() {
                   </span>
                 </span>
               ) : (
-                <span className="mr-2 mt-1 text-[10px] text-text-tertiary">
+                <span className="mr-2 mt-1 text-[10px] text-[color:var(--text-tertiary)]">
                   {new Date(msg.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
                 </span>
               )}
@@ -1174,20 +1184,29 @@ export default function ChatPage() {
 
         {(micState === "listening" || micState === "silence-detected") && (
           <div className="flex flex-col items-end animate-fade-in-up">
-            <div className={cn(
-              "max-w-[80%] rounded-3xl rounded-br-lg px-5 py-3 ring-1",
-              micState === "listening"
-                ? "bg-voice/8 ring-voice/20"
-                : "bg-primary/8 ring-primary/20",
-            )}>
+            <div
+              className={cn(
+                "max-w-[80%] rounded-3xl rounded-br-lg px-5 py-3 ring-1 backdrop-blur",
+                micState === "listening"
+                  ? "bg-[color:var(--voice)]/10 ring-[color:var(--voice)]/22"
+                  : "bg-[color:var(--primary)]/10 ring-[color:var(--primary)]/20",
+              )}
+            >
               <div className="flex items-center gap-2">
                 {micState === "listening" && (
                   <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-voice opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-voice" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[color:var(--voice)] opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[color:var(--voice)]" />
                   </span>
                 )}
-                <span className={cn("text-sm", micState === "listening" ? "text-voice" : "text-text-secondary")}>
+                <span
+                  className={cn(
+                    "text-sm",
+                    micState === "listening"
+                      ? "text-[color:var(--voice)]"
+                      : "text-[color:var(--text-secondary)]",
+                  )}
+                >
                   {micState === "listening" ? "A ouvir…" : "A processar…"}
                 </span>
               </div>
@@ -1196,30 +1215,29 @@ export default function ChatPage() {
         )}
 
         {messages.length === 0 && (
-          <div className="flex flex-1 flex-col items-center justify-center py-24 text-center">
-            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
-              <span className="hero-gradient-text text-3xl font-bold">V</span>
-            </div>
-            <p className="mb-2 text-base font-semibold text-text-primary">Olá! Sou o Vox.</p>
-            <p className="max-w-[240px] text-sm leading-relaxed text-text-tertiary">
-              Toca no microfone para falares comigo. Eu leio, respondo e organizo os teus emails.
+          <div className="flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
+            <p className="max-w-[300px] font-[family-name:var(--font-display)] text-[34px] italic leading-[1.12] tracking-[-0.01em] text-[color:var(--text-primary)]">
+              O que queres fazer hoje?
+            </p>
+            <p className="mt-5 max-w-[260px] text-sm leading-relaxed text-[color:var(--text-secondary)]">
+              Toca no microfone e fala comigo como falarias com um secretário.
             </p>
           </div>
         )}
       </div>
 
       <div
-        className="glass-frost fixed right-0 bottom-16 left-0 z-40 border-t border-divider/50"
-        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        className="glass-frost fixed inset-x-0 bottom-24 z-40 mx-4 rounded-[28px] border-[color:var(--hairline)]"
+        style={{ paddingBottom: "0.5rem" }}
       >
         <div className="flex flex-col items-center gap-1.5 px-5 py-3">
           {micState === "listening" && (
-            <span className="text-[11px] font-medium text-voice/80">
+            <span className="text-[11px] font-medium text-[color:var(--voice)]/80">
               A gravar — toca para parar ou aguarda silêncio
             </span>
           )}
           {micState === "silence-detected" && (
-            <span className="text-[11px] font-medium text-text-tertiary">
+            <span className="text-[11px] font-medium text-[color:var(--text-tertiary)]">
               Silêncio detectado — a processar…
             </span>
           )}
