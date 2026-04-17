@@ -74,6 +74,18 @@ export default function ChatPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const lastEmailRef = useRef<{ fromName: string; fromEmail: string; subject: string; body: string; id: string } | null>(null);
+  // pendingReplyRef tracks "we are actively awaiting the user's reply dictation".
+  // Different from lastEmailRef which is "most recently discussed email".
+  // When set, the next voice input bypasses intent classification and is
+  // treated as the body of the draft reply (routed to postPolish).
+  const pendingReplyRef = useRef<{
+    emailId: string;
+    fromName: string;
+    fromEmail: string;
+    subject: string;
+    body: string;
+    armedAt: number;
+  } | null>(null);
   const lastCalendarEventRef = useRef<{
     id: string;
     summary: string;
@@ -248,19 +260,84 @@ export default function ChatPage() {
         body: detail.body_text,
         id: detail.id,
       };
+      // Arm dictation mode: the next voice input becomes the draft body.
+      pendingReplyRef.current = {
+        emailId: detail.id,
+        fromName: detail.from_name ?? detail.from_email,
+        fromEmail: detail.from_email,
+        subject: detail.subject,
+        body: detail.body_text,
+        armedAt: Date.now(),
+      };
 
       addVoxCard({
         type: "transcription",
         title: `Responder a ${detail.from_name ?? detail.from_email}`,
-        content: `Assunto: ${detail.subject}. Toca no microfone para ditar a tua resposta.`,
+        content: `Assunto: ${detail.subject}. Toca no microfone e dita a tua resposta.`,
         meta: { De: detail.from_name ?? detail.from_email, Assunto: detail.subject },
       });
 
-      await playTTS(`Vais responder a ${detail.from_name ?? detail.from_email} sobre ${detail.subject}. Dita a tua resposta.`);
+      await playTTS(`Vais responder a ${detail.from_name ?? detail.from_email}. Dita a tua resposta.`);
     } catch {
       addVoxCard({ type: "error", title: "Erro", content: "Não consegui carregar o email para responder." });
     }
   }, [addVoxCard, playTTS]);
+
+  // Called when voice input arrives while pendingReplyRef is armed:
+  // route the transcript to /voice/polish with the email context and
+  // show the polished draft as a card for explicit confirmation.
+  const handleDictatedReply = useCallback(
+    async (
+      transcript: string,
+      context: {
+        emailId: string;
+        fromName: string;
+        fromEmail: string;
+        subject: string;
+        body: string;
+      },
+    ) => {
+      try {
+        const polishContext: PolishContext = {
+          transcript,
+          from_name: context.fromName,
+          from_email: context.fromEmail,
+          subject: context.subject,
+          body: context.body,
+        };
+        const polished = await postPolish(polishContext);
+
+        addVoxCard({
+          type: "draft",
+          title: `Rascunho para ${context.fromName}`,
+          content: polished.polished_text,
+          meta: {
+            Para: context.fromEmail,
+            Assunto: `Re: ${context.subject}`,
+          },
+          actions: [
+            { label: "Editar", action: "edit" },
+            { label: "Ditar de novo", action: "redictate" },
+            { label: "Enviar", action: "send" },
+          ],
+        });
+
+        // Draft is now visible; user must explicitly tap Enviar (or say "enviar").
+        pendingReplyRef.current = null;
+
+        await playTTS("Pronto. Vê o rascunho e toca em Enviar quando estiver bem.");
+      } catch {
+        addVoxCard({
+          type: "error",
+          title: "Não consegui preparar o rascunho",
+          content: "Tenta ditar novamente.",
+          actions: [{ label: "Tentar de novo", action: "redictate" }],
+        });
+        await playTTS("Falhou. Tenta ditar novamente.");
+      }
+    },
+    [addVoxCard, playTTS],
+  );
 
   const processIntent = useCallback(async (transcript: string) => {
     let intentResult: { intent: string; params: Record<string, unknown> };
@@ -611,12 +688,40 @@ export default function ChatPage() {
 
     setMicState("processing");
 
-    let transcribedText = "";
-
     postTranscribe(recorder.audioBlob)
-      .then((result) => {
-        transcribedText = result.text;
+      .then(async (result) => {
+        const transcribedText = result.text;
         addUserMessage(transcribedText, true);
+
+        // If we are awaiting a reply dictation, bypass intent classification
+        // and route straight to draft creation. The classifier's history-based
+        // detection is a second line of defense if this ref is unexpectedly
+        // cleared (see voice_intent.py Regra #8).
+        const pending = pendingReplyRef.current;
+        if (pending) {
+          // Safety: clear stale arms older than 10 min and fall back to normal flow.
+          if (Date.now() - pending.armedAt > 10 * 60_000) {
+            pendingReplyRef.current = null;
+            return processIntent(transcribedText);
+          }
+
+          // Cancel words: user wants out of reply mode.
+          const lower = transcribedText.toLowerCase().trim();
+          const cancelWords = ["cancelar", "cancela", "deixa", "esquece", "esqueçe"];
+          if (cancelWords.some((w) => lower.startsWith(w) || lower === w)) {
+            pendingReplyRef.current = null;
+            addVoxCard({
+              type: "transcription",
+              title: "Cancelado",
+              content: "Ok, cancelei o rascunho.",
+            });
+            await playTTS("Cancelei.");
+            return;
+          }
+
+          return handleDictatedReply(transcribedText, pending);
+        }
+
         return processIntent(transcribedText);
       })
       .catch(() => {
@@ -685,6 +790,8 @@ export default function ChatPage() {
     if (action === "send" && card?.type === "draft") {
       const lastEmail = lastEmailRef.current;
       const meta = card.meta ?? {};
+      // Defensive: pending dictation is invalidated once send is attempted.
+      pendingReplyRef.current = null;
       apiFetch("/emails/send", {
         method: "POST",
         body: JSON.stringify({
@@ -709,12 +816,41 @@ export default function ChatPage() {
       if (newText !== null) updateVoxCard(cardId, { content: newText });
     }
 
+    if (action === "redictate") {
+      // Re-arm dictation mode from the last email context.
+      const lastEmail = lastEmailRef.current;
+      if (lastEmail) {
+        pendingReplyRef.current = {
+          emailId: lastEmail.id,
+          fromName: lastEmail.fromName,
+          fromEmail: lastEmail.fromEmail,
+          subject: lastEmail.subject,
+          body: lastEmail.body,
+          armedAt: Date.now(),
+        };
+        addVoxCard({
+          type: "transcription",
+          title: "A ouvir de novo",
+          content: "Toca no microfone e dita o novo rascunho.",
+        });
+        playTTS("Dita de novo.").catch(() => {});
+      } else {
+        addVoxCard({
+          type: "error",
+          title: "Sem contexto",
+          content: "Perdi a referência ao email. Pede para responder novamente.",
+        });
+      }
+    }
+
     if (action === "redo" || action === "retry") {
       recorder.reset();
       setMicState("idle");
     }
 
     if (action === "reauth") {
+      // Clear any pending dictation — context is about to be invalidated by re-auth.
+      pendingReplyRef.current = null;
       // Redirect to Google OAuth re-auth to get new scopes (calendar + contacts)
       if (typeof window !== "undefined") {
         window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/auth/google/start`;

@@ -132,6 +132,18 @@ REGRAS DE OURO
 7. Cumprimentos e small talk ("olá", "obrigado", "como estás?") → \
    general SEM ask_clarification (conversa pura, o chat responde).
 
+8. DITAÇÃO DE RESPOSTA (segunda linha de defesa): se o utilizador está \
+   claramente a ditar o CORPO de um email (frases tipo "diz-lhe que...", \
+   "olá João, confirmo...", "obrigado pela...", "podemos marcar para \
+   quinta", "vou estar aí às 15h") E o histórico mostra que na turn \
+   anterior pediu "responde ao X" / Vox disse "dita a tua resposta" — \
+   isto NÃO é um novo intent. É o corpo do email. Devolve \
+   {{"intent": "general", "params": {{"text": "<transcript>", \
+   "is_dictation": true}}}} para o frontend saber que é ditação. \
+   Nota: o frontend tem o seu próprio flag (pendingReplyRef) que intercepta \
+   antes de chegar a este classifier; esta regra existe apenas para o caso \
+   desse ref ser perdido (recarregamento, erro).
+
 ============================================================
 EXEMPLOS (SUCESSO)
 ============================================================
