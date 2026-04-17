@@ -20,6 +20,7 @@ import {
   emailsKeys,
   listEmails,
   getEmail,
+  fetchEmailHeadlines,
   listCalendarEvents,
   createCalendarEvent,
   updateCalendarEvent,
@@ -27,6 +28,7 @@ import {
   searchContacts,
   type EmailListResponse,
   type EmailDetail,
+  type HeadlineItem,
   type CreateEventPayload,
   type UpdateEventPayload,
 } from "@/lib/queries";
@@ -216,14 +218,26 @@ export default function ChatPage() {
 
     const toRead = emailData.emails.slice(0, count);
 
-    // Show cards for each email (visual reference, not read aloud)
+    // Try to fetch LLM-generated executive headlines (one batched call).
+    // On failure, fall back to the snippet-based rendering so Vox stays alive.
+    let headlineById = new Map<string, HeadlineItem>();
+    try {
+      const { headlines } = await fetchEmailHeadlines(toRead.map((e) => e.id));
+      headlineById = new Map(headlines.map((h) => [h.id, h]));
+    } catch {
+      // Headlines API failed — leave map empty, UI falls back to snippet below.
+    }
+
+    // Show cards for each email — headline replaces snippet when available.
     for (const email of toRead) {
+      const fromLabel = email.from_name ?? email.from_email;
+      const headline = headlineById.get(email.id)?.headline;
       addVoxCard({
         type: "email-read",
-        title: email.subject || "(sem assunto)",
-        content: email.snippet || "",
+        title: fromLabel,
+        content: headline ?? email.snippet ?? "",
         meta: {
-          De: email.from_name ?? email.from_email,
+          De: fromLabel,
           Hora: new Date(email.received_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }),
         },
         actions: [
@@ -234,19 +248,30 @@ export default function ChatPage() {
       });
     }
 
-    // Concise voice summary — sender + topic only, like an executive briefing
-    const senders = toRead.map((e) => e.from_name ?? e.from_email.split("@")[0]);
-    const uniqueSenders = [...new Set(senders)];
-    let voiceText = `Tens ${toRead.length} email${toRead.length > 1 ? "s" : ""}`;
-    if (uniqueSenders.length === 1) {
-      voiceText += ` de ${uniqueSenders[0]}`;
-    } else if (uniqueSenders.length <= 3) {
-      voiceText += ` de ${uniqueSenders.slice(0, -1).join(", ")} e ${uniqueSenders.at(-1)}`;
-    } else {
-      voiceText += ` de ${uniqueSenders.length} pessoas diferentes`;
-    }
-    voiceText += ". Diz-me qual queres abrir.";
+    // Executive briefing TTS — "Três emails. João pede... Maria confirma... Qual abres?"
+    // Uses headlines when the LLM call succeeded; otherwise falls back to sender+subject.
+    const n = toRead.length;
+    const countWord = n === 1 ? "Um email"
+      : n === 2 ? "Dois emails"
+      : n === 3 ? "Três emails"
+      : n === 4 ? "Quatro emails"
+      : n === 5 ? "Cinco emails"
+      : n === 6 ? "Seis emails"
+      : n === 7 ? "Sete emails"
+      : n === 8 ? "Oito emails"
+      : n === 9 ? "Nove emails"
+      : n === 10 ? "Dez emails"
+      : `${n} emails`;
 
+    const briefs = toRead.map((email) => {
+      const headline = headlineById.get(email.id)?.headline;
+      if (headline) return headline;
+      const sender = email.from_name ?? email.from_email.split("@")[0];
+      const subject = email.subject || "sem assunto";
+      return `${sender}: ${subject}`;
+    });
+
+    const voiceText = `${countWord}. ${briefs.join(". ")}. Qual abres?`;
     await playTTS(voiceText);
   }, [emailData?.emails, addVoxCard, playTTS]);
 

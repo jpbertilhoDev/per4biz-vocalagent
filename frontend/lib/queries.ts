@@ -42,6 +42,26 @@ export function getEmail(id: string): Promise<EmailDetail> {
   return apiFetch<EmailDetail>(`/emails/${encodeURIComponent(id)}`);
 }
 
+export interface HeadlineItem {
+  id: string;
+  from_name: string | null;
+  from_email: string;
+  subject: string;
+  headline: string;
+}
+
+export interface HeadlinesResponse {
+  headlines: HeadlineItem[];
+  model_ms: number;
+}
+
+export function fetchEmailHeadlines(emailIds: string[]): Promise<HeadlinesResponse> {
+  return apiFetch<HeadlinesResponse>("/emails/headlines", {
+    method: "POST",
+    body: JSON.stringify({ email_ids: emailIds }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Calendar types + queries
 // ---------------------------------------------------------------------------

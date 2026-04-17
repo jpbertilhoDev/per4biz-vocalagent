@@ -37,7 +37,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.deps import current_user
 from app.logging import get_logger
-from app.services import gmail, supabase_client
+from app.services import email_headlines, gmail, supabase_client
 from app.services.auth_helpers import invalid_grant_response as _invalid_grant_response
 
 logger = get_logger(__name__)
@@ -178,6 +178,111 @@ def send_email(
 
     logger.info("emails.send.success")
     return result
+
+
+# ---------------------------------------------------------------------------
+# POST /emails/headlines — Sprint V1 polish · F2 · one-sentence executive brief
+# ---------------------------------------------------------------------------
+
+
+class HeadlinesRequest(BaseModel):
+    """Batch headline request — up to 10 emails per call."""
+
+    email_ids: list[str] = Field(..., min_length=1, max_length=10)
+
+
+class HeadlineItem(BaseModel):
+    """One email + its LLM-generated executive headline."""
+
+    id: str
+    from_name: str | None
+    from_email: str
+    subject: str
+    headline: str
+
+
+class HeadlinesResponse(BaseModel):
+    headlines: list[HeadlineItem]
+    model_ms: int
+
+
+@router.post("/emails/headlines", response_model=HeadlinesResponse)
+def post_email_headlines(
+    req: HeadlinesRequest,
+    user: dict[str, Any] = _CurrentUser,
+) -> Any:
+    """One-sentence PT-PT executive headline per email (batch LLM call).
+
+    Flow:
+        1. Fetch each email via `gmail.get_message` (reuses the existing
+           body-extraction + HTML-strip path). Sequential loop — `get_message`
+           is sync; for N ≤ 10 the wall time is dominated by Gmail API and the
+           Groq call, not by serial fetches.
+        2. Collect email metadata into a list of dicts (id, from_name,
+           from_email, subject, body_text) and pass to
+           `email_headlines.generate_headlines` (ONE Groq round-trip).
+        3. Zip headlines back with metadata; return.
+
+    Behaviour on errors:
+        - `RefreshError` mid-fetch → 401 + cleanup (same as other endpoints).
+        - Individual Gmail fetch failure → skip that email (don't fail the
+          whole batch; user sees the other headlines).
+        - LLM failure / JSON drift → service returns subjects as fallback —
+          endpoint still 200.
+
+    Invariantes (CLAUDE.md §3 + LOGGING-POLICY):
+        - Zero logs de `subject` / `body` / `headline`. Apenas `count` + `model_ms`.
+    """
+    fetched: list[dict[str, Any]] = []
+    try:
+        for email_id in req.email_ids:
+            try:
+                msg = gmail.get_message(user["sub"], email_id)
+            except RefreshError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — skip individual failures
+                logger.warning(
+                    "emails.headlines.fetch_skipped",
+                    error_type=type(exc).__name__,
+                )
+                continue
+            fetched.append(
+                {
+                    "id": msg.get("id", email_id),
+                    "from_name": msg.get("from_name"),
+                    "from_email": msg.get("from_email", ""),
+                    "subject": msg.get("subject", ""),
+                    "body_text": msg.get("body_text", ""),
+                }
+            )
+    except RefreshError:
+        return _invalid_grant_response(user["sub"])
+
+    headlines, model_ms = email_headlines.generate_headlines(fetched)
+
+    # Build response items by joining headline-by-id with metadata.
+    by_id_meta = {m["id"]: m for m in fetched}
+    items: list[HeadlineItem] = []
+    for h in headlines:
+        meta = by_id_meta.get(h["id"])
+        if meta is None:
+            continue
+        items.append(
+            HeadlineItem(
+                id=h["id"],
+                from_name=meta.get("from_name"),
+                from_email=meta.get("from_email", ""),
+                subject=meta.get("subject", ""),
+                headline=h["headline"],
+            )
+        )
+
+    logger.info(
+        "emails.headlines.success",
+        count=len(items),
+        model_ms=model_ms,
+    )
+    return HeadlinesResponse(headlines=items, model_ms=model_ms)
 
 
 # _invalid_grant_response imported from app.services.auth_helpers
