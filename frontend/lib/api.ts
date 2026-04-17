@@ -1,5 +1,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+export const AUTH_TOKEN_STORAGE_KEY = "vox-auth-token";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -18,8 +20,33 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Read the session JWT from localStorage. Used as a fallback to the
+ * cookie auth when the browser blocks cross-site cookies (Chrome 3rd-party
+ * cookie deprecation 2024+). The token is extracted from the auth callback
+ * redirect fragment on `/` — see app/page.tsx.
+ */
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearAuthToken(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_URL}${path}`;
+  const token = getAuthToken();
 
   let lastError: ApiError | null = null;
 
@@ -34,6 +61,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers ?? {}),
       },
     });
@@ -50,8 +78,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       // body não é JSON — mantém statusText
     }
 
-    // 401 — redirecionar para login (re-auth) — never retry
+    // 401 — clear stale token + redirect to login (re-auth) — never retry
     if (response.status === 401 && typeof window !== "undefined") {
+      clearAuthToken();
       window.location.href = "/";
       throw new ApiError(response.status, detail);
     }

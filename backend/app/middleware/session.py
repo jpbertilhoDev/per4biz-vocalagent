@@ -42,7 +42,14 @@ class SessionMiddleware(BaseHTTPMiddleware):
         request.state.current_user = None
         renewed: str | None = None
 
+        # Auth resolution order: cookie first (first-party friendly), then
+        # Authorization: Bearer header (fallback for browsers that block
+        # cross-site cookies — Chrome 3rd-party deprecation 2024+).
         token = request.cookies.get(SESSION_COOKIE)
+        if not token:
+            auth_header = request.headers.get("Authorization") or ""
+            if auth_header.startswith("Bearer "):
+                token = auth_header[len("Bearer ") :].strip() or None
         if token:
             try:
                 payload = decode_session(token)

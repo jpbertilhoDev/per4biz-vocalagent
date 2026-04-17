@@ -1,6 +1,11 @@
-import { apiFetch } from "./api";
+import { apiFetch, getAuthToken } from "./api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+function authHeaders(): HeadersInit {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export interface TranscribeResponse {
   text: string;
@@ -14,6 +19,7 @@ export async function postTranscribe(blob: Blob): Promise<TranscribeResponse> {
   const res = await fetch(`${API_URL}/voice/transcribe`, {
     method: "POST",
     credentials: "include",
+    headers: { ...authHeaders() },
     body: formData,
   });
   if (!res.ok) {
@@ -56,7 +62,7 @@ export async function fetchTTS(text: string, voiceId?: string): Promise<Blob> {
   const res = await fetch(`${API_URL}/voice/tts`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ text, voice_id: voiceId ?? null }),
   });
   if (!res.ok) {

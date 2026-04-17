@@ -178,8 +178,15 @@ def callback(
     # 7. Emitir session JWT + cookie `__Host-session`
     session_token = issue_session(UUID(settings.USER_ID), userinfo["email"])
     redirect_path = state_payload.get("redirect_to") or "/inbox"
-    # Redirect para o frontend (origem diferente do backend)
-    redirect_url = f"{settings.NEXT_PUBLIC_APP_URL.rstrip('/')}{redirect_path}"
+    # Redirect para o frontend (origem diferente do backend).
+    # Passa o token também no fragmento da URL (#session=...) para o frontend
+    # o guardar em localStorage e usar como Authorization: Bearer em fetch,
+    # contornando browsers que bloqueiam 3rd-party cookies.
+    # Fragmento NÃO é enviado ao servidor → não aparece em logs.
+    redirect_url = (
+        f"{settings.NEXT_PUBLIC_APP_URL.rstrip('/')}{redirect_path}"
+        f"#session={session_token}"
+    )
 
     response = RedirectResponse(url=redirect_url, status_code=307)
     response.set_cookie(

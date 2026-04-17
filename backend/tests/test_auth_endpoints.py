@@ -167,9 +167,15 @@ def test_callback_happy_path_creates_accounts_rows(
         f"(body: {response.text[:200]})"
     )
     location = response.headers.get("location", "")
-    # Backend redireciona para origem do frontend (cross-origin) — path pode estar absoluto
-    assert location.endswith("/inbox") or location.endswith("/auth/loading"), (
+    # Backend redireciona para origem do frontend (cross-origin) — path pode estar absoluto.
+    # Após adicionar fallback Authorization header, a URL leva `#session=<jwt>` no
+    # fragmento para o frontend armazenar em localStorage.
+    location_path = location.split("#", 1)[0]
+    assert location_path.endswith("/inbox") or location_path.endswith("/auth/loading"), (
         f"redirect esperado para /inbox ou /auth/loading, foi {location}"
+    )
+    assert "#session=" in location, (
+        f"redirect deve incluir fragmento #session=<jwt> para fallback Authorization header; foi {location}"
     )
 
     # Cookie de sessão emitido (SPEC §5.4 · RF-1.2)
