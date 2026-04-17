@@ -62,6 +62,17 @@ export function fetchEmailHeadlines(emailIds: string[]): Promise<HeadlinesRespon
   });
 }
 
+export interface TrashEmailResponse {
+  id: string;
+  labelIds: string[];
+}
+
+export function trashEmail(id: string): Promise<TrashEmailResponse> {
+  return apiFetch<TrashEmailResponse>(`/emails/${encodeURIComponent(id)}/trash`, {
+    method: "POST",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Calendar types + queries
 // ---------------------------------------------------------------------------

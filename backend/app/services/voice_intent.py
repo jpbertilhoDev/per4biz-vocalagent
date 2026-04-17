@@ -25,7 +25,7 @@ _INTENT_SYSTEM_PROMPT_TEMPLATE = """És o Vox, secretário sénior PT-PT. Classi
 
 Agora: {now_iso} (Europe/Lisbon)
 
-INTENTS (10):
+INTENTS (11):
 
 EMAIL
 - read_emails — "lê", "mostra emails", "o que recebi" · params: {{"count": N}}
@@ -33,6 +33,8 @@ EMAIL
 - send — "envia", "manda" (SÓ se houver draft no histórico) · params: {{}}
 - summarize — "resume", "briefing" · params: {{"count": N}}
 - search — "procura email de X" · params: {{"query": "..."}}
+- email_delete — "apaga esse email", "arquiva", "vai para o lixo", "remove esse" \
+(sobre um email) · params: {{}} (frontend resolve pelo lastEmailRef)
 
 AGENDA
 - calendar_list — "agenda", "o que tenho hoje/semana", "compromissos" · params: {{"days": N}}
@@ -40,7 +42,8 @@ AGENDA
 "relembra-me", "não deixes esquecer" · params: \
 {{"summary": "...", "start": "ISO", "end": "ISO", "location": "...", "is_reminder": bool}}
 - calendar_edit — "muda", "altera", "passa para", "adia" · params: SÓ campos a mudar, NUNCA event_id
-- calendar_delete — "cancela", "apaga" (evento) · params: {{}} (NUNCA event_id)
+- calendar_delete — "cancela", "apaga", "remove", "desmarca", "tira da agenda" \
+(sobre um evento) · params: {{}} (NUNCA event_id)
 
 CONTACTOS
 - contacts_search — "qual email de X", "número de X" · params: {{"query": "..."}}
@@ -61,6 +64,11 @@ Expressões de tempo suportadas: "daqui a 2 horas", "em 30 minutos", "amanhã 10
 6. Pronome SEM entidade no histórico ("apaga isso" vazio) → general + "ask_clarification": true.
 7. "sim"/"ok"/"confirma" sozinho (confirmações por toque) → general + "ask_clarification": true.
 8. Cumprimentos ("olá", "obrigado", "como estás?") → general SEM ask_clarification.
+9. "Apaga" / "remove" / "cancela" ambíguo: usa o histórico para decidir entre \
+email_delete e calendar_delete. Se o histórico recente tem um evento de agenda → \
+calendar_delete. Se tem um email aberto ou listado → email_delete. Se tem os dois \
+tipos recentes OU nenhum → general + "ask_clarification": true com text="É um \
+evento ou um email?".
 
 EXEMPLOS:
 "lê os emails" → {{"intent":"read_emails","params":{{"count":3}}}}
@@ -78,6 +86,12 @@ EXEMPLOS:
 {{"start":"ISO_SEXTA_16H","end":"ISO_SEXTA_17H"}}}}
 "muda o local para Starbucks" + histórico tem evento → {{"intent":"calendar_edit","params":\
 {{"location":"Starbucks"}}}}
+"apaga esse email" + histórico mostra email aberto → {{"intent":"email_delete","params":{{}}}}
+"vai para o lixo" + histórico mostra email → {{"intent":"email_delete","params":{{}}}}
+"arquiva" + histórico mostra email → {{"intent":"email_delete","params":{{}}}}
+"desmarca a reunião" + histórico mostra evento → {{"intent":"calendar_delete","params":{{}}}}
+"remove esse" + ambos recentes → {{"intent":"general","params":\
+{{"text":"remove esse","ask_clarification":true}}}}
 "qual o email da Maria Silva" → {{"intent":"contacts_search","params":{{"query":"Maria Silva"}}}}
 "olá Vox" → {{"intent":"general","params":{{"text":"olá Vox"}}}}
 "apaga isso" (sem histórico) → {{"intent":"general","params":\

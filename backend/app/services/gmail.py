@@ -578,3 +578,48 @@ def send_message(
         "message_id": response.get("id", ""),
         "thread_id": response.get("threadId", ""),
     }
+
+
+def trash_message(user_id: str, message_id: str) -> dict[str, Any]:
+    """Move a Gmail message to trash (Sprint V1 polish · F-Delete).
+
+    Wraps ``users.messages.trash`` which is reversible — the message stays in
+    Gmail's Trash folder for 30 days and the user can restore it from the web
+    UI. We deliberately do NOT use ``users.messages.delete`` (permanent).
+
+    Scope required: ``https://www.googleapis.com/auth/gmail.modify`` — already
+    requested by ``app.routers.auth`` at OAuth start. If the scope is missing
+    (user authorized before the scope was added) Google returns 403
+    ``insufficient permission`` and the router translates it into
+    ``gmail_modify_scope_missing`` so the UI can prompt re-auth.
+
+    Args:
+        user_id: UUID do user (V1 fixo em ``settings.USER_ID``).
+        message_id: Gmail message id devolvido por ``list_messages`` /
+            ``get_message``.
+
+    Returns:
+        ``{"id": <message_id>, "labelIds": [...]}`` — the labels will now
+        include ``"TRASH"`` on success.
+
+    Raises:
+        google.auth.exceptions.RefreshError: refresh_token revogado (AC-2.7).
+        googleapiclient.errors.HttpError: propagada bruta — router traduz
+            404 → email_not_found, 403 → gmail_modify_scope_missing, etc.
+
+    Invariantes (CLAUDE.md §3 + LOGGING-POLICY):
+        - Zero logs de subject/body. Apenas ID parcial anonimizado para
+          correlação em Axiom/Sentry.
+    """
+    creds = _get_valid_credentials(user_id)
+    service = discovery.build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+    result: dict[str, Any] = (
+        service.users().messages().trash(userId="me", id=message_id).execute()
+    )
+
+    logger.info("gmail.trash.ok", gmail_message_id=message_id[:8])
+    return {
+        "id": result.get("id", ""),
+        "labelIds": result.get("labelIds", []) or [],
+    }

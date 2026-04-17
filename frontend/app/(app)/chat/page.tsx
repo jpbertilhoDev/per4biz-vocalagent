@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Mic } from "lucide-react";
 
 import { useChatStore, buildHistoryFromMessages, type VoxCard, type MicState } from "@/lib/chat-store";
@@ -21,6 +21,7 @@ import {
   listEmails,
   getEmail,
   fetchEmailHeadlines,
+  trashEmail,
   listCalendarEvents,
   createCalendarEvent,
   updateCalendarEvent,
@@ -71,6 +72,7 @@ function useVoxRecorder() {
 export default function ChatPage() {
   const { messages, addVoxCard, addUserMessage, updateVoxCard } = useChatStore();
   const { recorder, micState, setMicState } = useVoxRecorder();
+  const qc = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [welcomeSent, setWelcomeSent] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -103,6 +105,7 @@ export default function ChatPage() {
       | { type: "create"; payload: CreateEventPayload }
       | { type: "edit"; eventId: string; summary: string; changes: UpdateEventPayload }
       | { type: "delete"; eventId: string; summary: string }
+      | { type: "email-trash"; emailId: string; subject: string; fromName: string }
     >
   >(new Map());
 
@@ -648,6 +651,45 @@ export default function ChatPage() {
         ],
       });
       await playTTS(`Confirmas que apago ${target.summary}?`);
+    } else if (intent === "email_delete") {
+      // Mirrors the calendar_delete flow: resolve target via lastEmailRef,
+      // show a confirmation card with Sim/Cancelar, execute on confirm.
+      // Never auto-trash — destructive action requires explicit user tap.
+      const target = lastEmailRef.current;
+      if (!target) {
+        addVoxCard({
+          type: "error",
+          title: "Qual email?",
+          content: "Não sei a que email te referes. Abre ou lê primeiro o email.",
+        });
+        await playTTS("Qual email queres apagar?");
+        return;
+      }
+
+      const pendingId = crypto.randomUUID();
+      pendingActionsRef.current.set(pendingId, {
+        type: "email-trash",
+        emailId: target.id,
+        subject: target.subject,
+        fromName: target.fromName,
+      });
+
+      addVoxCard({
+        type: "email-confirm",
+        title: "Apagar email?",
+        content: `De ${target.fromName}\n${target.subject}`,
+        meta: {
+          De: target.fromName,
+          Assunto: target.subject,
+          pendingId,
+        },
+        actions: [
+          // Reuse calendar-cancel — same semantics (remove pending + "Cancelei.")
+          { label: "Cancelar", action: "calendar-cancel" },
+          { label: "Sim, apagar", action: "email-delete-confirm" },
+        ],
+      });
+      await playTTS(`Apago o email de ${target.fromName}?`);
     } else if (intent === "contacts_search") {
       const query = String(intentResult.params.query ?? transcript);
       try {
@@ -1024,7 +1066,44 @@ export default function ChatPage() {
           await playTTS("Não consegui apagar.");
         });
     }
-  }, [emailData?.emails, messages, addVoxCard, updateVoxCard, playTTS, setMicState, recorder, handleReadEmails, handleReplyToEmail]);
+
+    if (action === "email-delete-confirm" && pending?.type === "email-trash") {
+      const { emailId, fromName, subject } = pending;
+      pendingActionsRef.current.delete(pendingId!);
+      trashEmail(emailId)
+        .then(async () => {
+          // Clear lastEmailRef so a second "apaga esse email" doesn't
+          // silently trash a stale reference.
+          if (lastEmailRef.current?.id === emailId) {
+            lastEmailRef.current = null;
+          }
+          addVoxCard({
+            type: "confirmation",
+            title: "Email apagado",
+            content: `"${subject}" movido para o lixo.`,
+            meta: { De: fromName, Assunto: subject },
+          });
+          await playTTS("Apagado.");
+          // Refresh inbox list so the UI reflects the removal.
+          qc.invalidateQueries({ queryKey: emailsKeys.list() });
+        })
+        .catch(async (err) => {
+          const detail = err instanceof ApiError ? err.detail : "";
+          const scopeMissing = detail === "gmail_modify_scope_missing";
+          addVoxCard({
+            type: "error",
+            title: "Não consegui apagar",
+            content: scopeMissing
+              ? "Preciso de permissão para modificar emails. Volta a autorizar."
+              : "Algo falhou. Tenta novamente.",
+            ...(scopeMissing
+              ? { actions: [{ label: "Autorizar", action: "reauth" }] }
+              : {}),
+          });
+          await playTTS("Não consegui apagar.");
+        });
+    }
+  }, [emailData?.emails, messages, addVoxCard, updateVoxCard, playTTS, setMicState, recorder, handleReadEmails, handleReplyToEmail, qc]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">

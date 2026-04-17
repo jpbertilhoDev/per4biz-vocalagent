@@ -25,6 +25,7 @@ const typeConfig: Record<CardType, { icon: React.ElementType; accent: string; la
   "calendar-event": { icon: Calendar, accent: "text-primary", label: "Agenda" },
   "calendar-create": { icon: CalendarPlus, accent: "text-success", label: "Criado" },
   "calendar-confirm": { icon: CalendarCheck, accent: "text-voice", label: "Confirmar" },
+  "email-confirm": { icon: Mail, accent: "text-voice", label: "Confirmar" },
   "contact-card": { icon: Users, accent: "text-primary", label: "Contacto" },
 };
 
@@ -49,6 +50,7 @@ export function VoxCard({ card, onAction }: VoxCardProps) {
         card.type === "calendar-event" && "border-primary/20",
         card.type === "calendar-create" && "border-success/30",
         card.type === "calendar-confirm" && "border-voice/30",
+        card.type === "email-confirm" && "border-voice/30",
         card.type === "contact-card" && "border-primary/20",
       )}
       role="article"
@@ -67,6 +69,7 @@ export function VoxCard({ card, onAction }: VoxCardProps) {
             card.type === "calendar-event" && "bg-primary/15",
             card.type === "calendar-create" && "bg-success/15",
             card.type === "calendar-confirm" && "bg-voice/15",
+            card.type === "email-confirm" && "bg-voice/15",
             card.type === "contact-card" && "bg-primary/15",
           )}
         >
@@ -113,7 +116,8 @@ export function VoxCard({ card, onAction }: VoxCardProps) {
                 action.action === "confirm" ||
                 action.action === "calendar-create-confirm" ||
                 action.action === "calendar-edit-confirm" ||
-                action.action === "calendar-delete-confirm"
+                action.action === "calendar-delete-confirm" ||
+                action.action === "email-delete-confirm"
                   ? "default"
                   : "ghost"
               }

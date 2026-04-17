@@ -33,6 +33,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from google.auth.exceptions import RefreshError
+from googleapiclient.errors import HttpError
 from pydantic import BaseModel, EmailStr, Field
 
 from app.deps import current_user
@@ -177,6 +178,85 @@ def send_email(
         )
 
     logger.info("emails.send.success")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# POST /emails/{message_id}/trash — Sprint V1 polish · F-Delete
+# ---------------------------------------------------------------------------
+
+
+class TrashResponse(BaseModel):
+    """Shape devolvida por ``POST /emails/{id}/trash`` (Gmail label update).
+
+    ``labelIds`` deverá conter ``"TRASH"`` após sucesso — o frontend usa
+    isso para confirmar visualmente que a acção foi aplicada.
+    """
+
+    id: str
+    labelIds: list[str] = Field(default_factory=list)  # noqa: N815 — matches Gmail API response shape (camelCase)
+
+
+@router.post("/emails/{message_id}/trash", response_model=TrashResponse)
+def trash_email(
+    message_id: str,
+    user: dict[str, Any] = _CurrentUser,
+) -> Any:
+    """Move um email para o lixo do Gmail (reversível · F-Delete).
+
+    Chama ``gmail.trash_message`` → ``users.messages.trash``. O email fica
+    na pasta Trash do Gmail durante 30 dias e o user pode restaurar via web
+    UI. NÃO é uma delete permanente (para isso seria ``users.messages.delete``
+    — intencionalmente fora de escopo V1).
+
+    Guardrail (CLAUDE.md §3.7): destructive ops exigem confirmação explícita.
+    Este endpoint assume que o frontend já mostrou a VoxCard de confirmação
+    e o user tapou em "Sim, apagar" — mesma semântica do ``/emails/send``.
+
+    Errors:
+        - ``RefreshError`` → 401 + cleanup de ``google_accounts``
+          (mesma lógica que outros endpoints deste router).
+        - Gmail 404 → ``HTTPException(404, "email_not_found")`` — id
+          inválido ou email já apagado.
+        - Gmail 403 → ``HTTPException(403, "gmail_modify_scope_missing")``
+          — user autorizou antes do scope ``gmail.modify`` ter sido pedido;
+          frontend apresenta CTA "Autorizar".
+        - Outros upstream → ``HTTPException(502, "gmail_upstream: ...")``.
+
+    Invariantes (CLAUDE.md §3 + LOGGING-POLICY):
+        - Zero logs de subject/from_email. Apenas status code + reason
+          truncado + ID parcial para correlação.
+    """
+    try:
+        result = gmail.trash_message(user["sub"], message_id)
+    except RefreshError:
+        return _invalid_grant_response(user["sub"])
+    except HttpError as exc:
+        resp_status = exc.resp.status if exc.resp else 500
+        raw = exc.content.decode("utf-8", errors="replace") if exc.content else ""
+        lower = raw.lower()
+        if resp_status == 404:
+            raise HTTPException(status_code=404, detail="email_not_found") from exc
+        if resp_status == 403:
+            # Both "insufficient permission" (scope missing) and generic 403
+            # land here; the canonical UI message is the same — re-auth.
+            if "insufficient permission" in lower or "insufficientpermissions" in lower:
+                raise HTTPException(
+                    status_code=403, detail="gmail_modify_scope_missing"
+                ) from exc
+            raise HTTPException(
+                status_code=403, detail=f"gmail_forbidden: {raw[:200]}"
+            ) from exc
+        logger.warning(
+            "emails.trash.google_error",
+            status_code=resp_status,
+            error_reason=raw[:200],
+        )
+        raise HTTPException(
+            status_code=502, detail=f"gmail_upstream: {raw[:200]}"
+        ) from exc
+
+    logger.info("emails.trash.success")
     return result
 
 
