@@ -120,7 +120,15 @@ def callback(
     userinfo = google_oauth.fetch_userinfo(tokens["access_token"])
 
     # 4. Gating ALLOWED_USER_EMAIL — ANTES de qualquer escrita em Supabase
-    if userinfo.get("email") != settings.ALLOWED_USER_EMAIL:
+    # Wildcard "*" desliga o gate (modo demo). Qualquer outro valor comporta
+    # como whitelist de email único (V1 single-tenant).
+    _allowed = settings.ALLOWED_USER_EMAIL.strip()
+    if _allowed == "*":
+        logger.warning(
+            "auth.callback.gate_bypassed_wildcard",
+            email_hash=hash(userinfo.get("email", "")) & 0xFFFFFF,
+        )
+    elif userinfo.get("email") != _allowed:
         logger.warning("auth.callback.email_not_allowed")
         raise HTTPException(status_code=403, detail="Email not allowed")
 
