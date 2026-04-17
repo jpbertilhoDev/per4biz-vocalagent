@@ -36,8 +36,9 @@ EMAIL
 
 AGENDA
 - calendar_list — "agenda", "o que tenho hoje/semana", "compromissos" · params: {{"days": N}}
-- calendar_create — "marca", "agenda reunião com X", "bloqueia" · params: \
-{{"summary": "...", "start": "ISO", "end": "ISO", "location": "..."}}
+- calendar_create — "marca", "agenda reunião com X", "bloqueia", "lembra-me", \
+"relembra-me", "não deixes esquecer" · params: \
+{{"summary": "...", "start": "ISO", "end": "ISO", "location": "...", "is_reminder": bool}}
 - calendar_edit — "muda", "altera", "passa para", "adia" · params: SÓ campos a mudar, NUNCA event_id
 - calendar_delete — "cancela", "apaga" (evento) · params: {{}} (NUNCA event_id)
 
@@ -51,11 +52,15 @@ REGRAS:
 1. Frase com gatilho claro → EXECUTA o intent. Não peças clarificação.
 2. Datas em ISO 8601 com offset Lisboa. "amanhã às 15h" → "{tomorrow_iso_15h}". \
 Sem hora explícita, assume 09:00. Sem duração, 1h.
-3. calendar_edit/delete: params APENAS campos a mudar. NUNCA event_id (frontend resolve).
-4. Usa o histórico para resolver pronomes ("isso", "essa", "ele") e "amanhã às 15h".
-5. Pronome SEM entidade no histórico ("apaga isso" vazio) → general + "ask_clarification": true.
-6. "sim"/"ok"/"confirma" sozinho (confirmações por toque) → general + "ask_clarification": true.
-7. Cumprimentos ("olá", "obrigado", "como estás?") → general SEM ask_clarification.
+3. LEMBRETES ("lembra-me de X daqui a Y", "relembra-me X em Z") → calendar_create com \
+`is_reminder: true`, duração 5 minutos, summary é o conteúdo do lembrete (não "Lembrete: X"). \
+Expressões de tempo suportadas: "daqui a 2 horas", "em 30 minutos", "amanhã 10h", \
+"hoje à tarde" (assume 15:00), "hoje à noite" (assume 20:00).
+4. calendar_edit/delete: params APENAS campos a mudar. NUNCA event_id (frontend resolve).
+5. Usa o histórico para resolver pronomes ("isso", "essa", "ele") e "amanhã às 15h".
+6. Pronome SEM entidade no histórico ("apaga isso" vazio) → general + "ask_clarification": true.
+7. "sim"/"ok"/"confirma" sozinho (confirmações por toque) → general + "ask_clarification": true.
+8. Cumprimentos ("olá", "obrigado", "como estás?") → general SEM ask_clarification.
 
 EXEMPLOS:
 "lê os emails" → {{"intent":"read_emails","params":{{"count":3}}}}
@@ -64,6 +69,10 @@ EXEMPLOS:
 "o que tenho na agenda esta semana" → {{"intent":"calendar_list","params":{{"days":7}}}}
 "marca reunião com Maria amanhã 15h" → {{"intent":"calendar_create","params":\
 {{"summary":"Reunião com Maria","start":"{tomorrow_iso_15h}","end":"{tomorrow_iso_16h}"}}}}
+"lembra-me daqui a 2 horas de ligar ao João" → {{"intent":"calendar_create","params":\
+{{"summary":"Ligar ao João","start":"{reminder_in_2h_iso}","end":"{reminder_in_2h_end_iso}","is_reminder":true}}}}
+"relembra-me amanhã 10h de preparar o relatório" → {{"intent":"calendar_create","params":\
+{{"summary":"Preparar o relatório","start":"{tomorrow_iso_10h}","end":"{tomorrow_iso_10h05}","is_reminder":true}}}}
 "cancela essa reunião" + histórico tem evento → {{"intent":"calendar_delete","params":{{}}}}
 "passa para sexta 16h" + histórico tem evento → {{"intent":"calendar_edit","params":\
 {{"start":"ISO_SEXTA_16H","end":"ISO_SEXTA_17H"}}}}
@@ -96,12 +105,20 @@ def _build_intent_prompt() -> str:
     tomorrow = now + timedelta(days=1)
     tomorrow_15h = tomorrow.replace(hour=15, minute=0, second=0, microsecond=0)
     tomorrow_16h = tomorrow.replace(hour=16, minute=0, second=0, microsecond=0)
+    tomorrow_10h = tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
+    tomorrow_10h05 = tomorrow.replace(hour=10, minute=5, second=0, microsecond=0)
+    reminder_in_2h = now + timedelta(hours=2)
+    reminder_in_2h_end = reminder_in_2h + timedelta(minutes=5)
 
     return _INTENT_SYSTEM_PROMPT_TEMPLATE.format(
         now_iso=now.isoformat(timespec="seconds"),
         now_human=now.strftime("%A, %d %B %Y, %H:%M"),
         tomorrow_iso_15h=tomorrow_15h.isoformat(timespec="seconds"),
         tomorrow_iso_16h=tomorrow_16h.isoformat(timespec="seconds"),
+        tomorrow_iso_10h=tomorrow_10h.isoformat(timespec="seconds"),
+        tomorrow_iso_10h05=tomorrow_10h05.isoformat(timespec="seconds"),
+        reminder_in_2h_iso=reminder_in_2h.isoformat(timespec="seconds"),
+        reminder_in_2h_end_iso=reminder_in_2h_end.isoformat(timespec="seconds"),
     )
 
 

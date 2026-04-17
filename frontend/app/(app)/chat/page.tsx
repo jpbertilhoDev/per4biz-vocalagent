@@ -480,20 +480,28 @@ export default function ChatPage() {
         }
       }
     } else if (intent === "calendar_create") {
-      const { summary, start, end, location } = intentResult.params as {
+      const { summary, start, end, location, is_reminder } = intentResult.params as {
         summary?: string;
         start?: string;
         end?: string;
         location?: string;
+        is_reminder?: boolean;
       };
       if (!summary) {
-        addVoxCard({ type: "transcription", title: "Criar evento", content: "Qual é o título do evento que queres criar?" });
-        await playTTS("Qual é o título do evento que queres criar?");
+        const askTitle = is_reminder ? "Lembrete" : "Criar evento";
+        const askMsg = is_reminder
+          ? "Do que te queres lembrar?"
+          : "Qual é o título do evento que queres criar?";
+        addVoxCard({ type: "transcription", title: askTitle, content: askMsg });
+        await playTTS(askMsg);
         return;
       }
       const now = new Date();
       const finalStart = start ?? new Date(now.getTime() + 3600000).toISOString();
-      const finalEnd = end ?? new Date(new Date(finalStart).getTime() + 3600000).toISOString();
+      const reminderDurationMs = 5 * 60 * 1000;
+      const defaultDurationMs = is_reminder ? reminderDurationMs : 3600000;
+      const finalEnd =
+        end ?? new Date(new Date(finalStart).getTime() + defaultDurationMs).toISOString();
       const payload: CreateEventPayload = {
         summary,
         start: finalStart,
@@ -504,23 +512,41 @@ export default function ChatPage() {
       const pendingId = crypto.randomUUID();
       pendingActionsRef.current.set(pendingId, { type: "create", payload });
 
-      const whenStr = `${new Date(finalStart).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" })}, ${new Date(finalStart).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}–${new Date(finalEnd).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`;
+      const dateLabel = new Date(finalStart).toLocaleDateString("pt-PT", {
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+      });
+      const timeLabel = new Date(finalStart).toLocaleTimeString("pt-PT", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const whenStr = is_reminder
+        ? `${dateLabel}, ${timeLabel}`
+        : `${dateLabel}, ${timeLabel}–${new Date(finalEnd).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`;
       addVoxCard({
         type: "calendar-confirm",
-        title: "Criar evento?",
+        title: is_reminder ? "Criar lembrete?" : "Criar evento?",
         content: [summary, whenStr, location].filter(Boolean).join("\n"),
         meta: {
-          Título: summary,
+          ...(is_reminder ? { Lembrete: summary } : { Título: summary }),
           Quando: whenStr,
           ...(location ? { Onde: location } : {}),
           pendingId,
         },
         actions: [
           { label: "Cancelar", action: "calendar-cancel" },
-          { label: "Sim, criar", action: "calendar-create-confirm" },
+          {
+            label: is_reminder ? "Sim, lembrar" : "Sim, criar",
+            action: "calendar-create-confirm",
+          },
         ],
       });
-      await playTTS(`Queres que marque ${summary}?`);
+      await playTTS(
+        is_reminder
+          ? `Queres que te lembre de ${summary}?`
+          : `Queres que marque ${summary}?`,
+      );
     } else if (intent === "calendar_edit") {
       const target = lastCalendarEventRef.current;
       if (!target) {
@@ -896,6 +922,9 @@ export default function ChatPage() {
 
     if (action === "calendar-create-confirm" && pending?.type === "create") {
       const payload = pending.payload;
+      // Detect if this was a reminder based on the confirm card meta shape
+      // (meta.Lembrete is only set when is_reminder=true at the create branch).
+      const wasReminder = Boolean(card?.meta?.Lembrete);
       pendingActionsRef.current.delete(pendingId!);
       createCalendarEvent(payload)
         .then(async (created) => {
@@ -908,15 +937,17 @@ export default function ChatPage() {
           };
           addVoxCard({
             type: "calendar-create",
-            title: "Evento criado",
-            content: `"${created.summary}" marcado.`,
+            title: wasReminder ? "Lembrete criado" : "Evento criado",
+            content: wasReminder
+              ? `Vou lembrar-te: "${created.summary}".`
+              : `"${created.summary}" marcado.`,
             meta: {
-              Título: created.summary,
+              ...(wasReminder ? { Lembrete: created.summary } : { Título: created.summary }),
               Início: new Date(created.start).toLocaleString("pt-PT"),
               Fim: new Date(created.end).toLocaleString("pt-PT"),
             },
           });
-          await playTTS("Marcado.");
+          await playTTS(wasReminder ? "Fica combinado." : "Marcado.");
         })
         .catch(async (err) => {
           if (err instanceof ApiError && err.detail === "calendar_scope_missing") {
