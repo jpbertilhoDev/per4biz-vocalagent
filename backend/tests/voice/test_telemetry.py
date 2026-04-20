@@ -12,7 +12,7 @@ from app.services import telemetry
 
 @pytest.fixture
 def mock_supabase():
-    with patch("app.services.telemetry.get_supabase_client") as m:
+    with patch("app.services.telemetry.get_supabase_admin") as m:
         client = MagicMock()
         m.return_value = client
         yield client

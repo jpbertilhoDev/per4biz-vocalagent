@@ -10,7 +10,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.logging import get_logger
-from app.services.supabase_client import get_supabase_client
+from app.services.supabase_client import get_supabase_admin
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,7 @@ def emit_phase(
         raise ValueError(f"status must be one of {_VALID_STATUSES}")
 
     try:
-        client = get_supabase_client()
+        client = get_supabase_admin()
         client.table("voice_latency_events").insert(
             {
                 "voice_session_id": str(session_id),
