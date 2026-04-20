@@ -46,9 +46,9 @@ $$;
 comment on function public.cleanup_expired_voice_latency_events is
   'E10 — apaga eventos de latência > 30 dias. Corre diariamente via pg_cron.';
 
--- Agendar cleanup diário às 03:00 UTC
+-- Agendar cleanup diário às 03:30 UTC (staggered face aos jobs de 0002)
 select cron.schedule(
-  'cleanup_voice_latency_events',
-  '0 3 * * *',
+  'per4biz-cleanup-voice-latency-events',
+  '30 3 * * *',
   $$ select public.cleanup_expired_voice_latency_events(); $$
 );
