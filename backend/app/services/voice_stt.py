@@ -15,12 +15,15 @@ Regras:
 
 from __future__ import annotations
 
+import time
 from typing import Any
+from uuid import UUID
 
 from groq import Groq
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.services import telemetry
 from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
@@ -29,7 +32,13 @@ MAX_AUDIO_BYTES = 1_048_576  # 1 MiB — SPEC §3 / RF-V.1
 _HTTP_TIMEOUT = 30.0
 
 
-def transcribe(audio_bytes: bytes, mime: str = "audio/webm") -> dict[str, Any]:
+def transcribe(
+    audio_bytes: bytes,
+    mime: str = "audio/webm",
+    *,
+    session_id: UUID | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     """Transcreve áudio PT-PT via Groq Whisper v3.
 
     Args:
@@ -49,16 +58,32 @@ def transcribe(audio_bytes: bytes, mime: str = "audio/webm") -> dict[str, Any]:
     if len(audio_bytes) > MAX_AUDIO_BYTES:
         raise ValueError(f"audio too large: {len(audio_bytes)} bytes > {MAX_AUDIO_BYTES}")
 
-    settings = get_settings()
-    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
+    _emit = session_id is not None and user_id is not None
+    t0 = time.monotonic()
+    if _emit:
+        telemetry.emit_phase(session_id, user_id, "stt_start", 0, "ok")  # type: ignore[arg-type]
 
-    result = retry_with_backoff(
-        client.audio.transcriptions.create,
-        file=("audio.webm", audio_bytes, mime),
-        model=settings.GROQ_STT_MODEL,
-        response_format="verbose_json",
-        language="pt",
-    )
+    try:
+        settings = get_settings()
+        client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
+
+        result = retry_with_backoff(
+            client.audio.transcriptions.create,
+            file=("audio.webm", audio_bytes, mime),
+            model=settings.GROQ_STT_MODEL,
+            response_format="verbose_json",
+            language="pt",
+        )
+    except Exception:
+        if _emit:
+            telemetry.emit_phase(
+                session_id,  # type: ignore[arg-type]
+                user_id,  # type: ignore[arg-type]
+                "stt_done",
+                int((time.monotonic() - t0) * 1000),
+                "error",
+            )
+        raise
 
     duration_seconds = getattr(result, "duration", None) or 0.0
     duration_ms = int(duration_seconds * 1000)
@@ -69,6 +94,15 @@ def transcribe(audio_bytes: bytes, mime: str = "audio/webm") -> dict[str, Any]:
         bytes_len=len(audio_bytes),
         duration_ms=duration_ms,
     )
+
+    if _emit:
+        telemetry.emit_phase(
+            session_id,  # type: ignore[arg-type]
+            user_id,  # type: ignore[arg-type]
+            "stt_done",
+            int((time.monotonic() - t0) * 1000),
+            "ok",
+        )
 
     return {
         "text": result.text,

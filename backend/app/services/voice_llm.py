@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from uuid import UUID
 
 from groq import Groq
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.services import telemetry
 from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
@@ -56,7 +58,13 @@ Se o ditado for ambíguo ou curto demais, produzir melhor tentativa possível \
 """
 
 
-def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
+def polish_draft(
+    transcript: str,
+    context: dict[str, str],
+    *,
+    session_id: UUID | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     """Polir draft de email via Groq Llama 3.3 70B.
 
     Args:
@@ -66,6 +74,8 @@ def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
             - `from_email` (str): email do remetente original.
             - `subject` (str): assunto do email original.
             - `body` (str): corpo do email original (trunca a 2000 chars).
+        session_id: optional voice session UUID for phase telemetry.
+        user_id: optional authenticated user UUID for phase telemetry.
 
     Returns:
         dict com chaves:
@@ -75,36 +85,52 @@ def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
     Raises:
         Exception: qualquer erro do SDK Groq propaga raw (router traduz 502).
     """
-    settings = get_settings()
-    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
+    _emit = session_id is not None and user_id is not None
+    t_phase = time.monotonic()
+    if _emit:
+        telemetry.emit_phase(session_id, user_id, "llm_start", 0, "ok")  # type: ignore[arg-type]
 
-    from_name = context.get("from_name") or context.get("from_email", "")
-    subject = context.get("subject", "")
-    body = context.get("body", "")[:_MAX_BODY_CHARS]
+    try:
+        settings = get_settings()
+        client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
 
-    user_content = (
-        f"Email recebido de: {from_name}\n"
-        f"Assunto: {subject}\n"
-        f"Corpo (primeiros {_MAX_BODY_CHARS} chars):\n{body}\n\n"
-        f"---\n\n"
-        f"Ditado do utilizador (transcrição):\n{transcript}\n\n"
-        f"Gera a resposta em PT-PT."
-    )
+        from_name = context.get("from_name") or context.get("from_email", "")
+        subject = context.get("subject", "")
+        body = context.get("body", "")[:_MAX_BODY_CHARS]
 
-    t0 = time.monotonic()
-    response = retry_with_backoff(
-        client.chat.completions.create,
-        model=settings.GROQ_LLM_MODEL,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0.5,
-        max_tokens=500,
-    )
-    model_ms = int((time.monotonic() - t0) * 1000)
+        user_content = (
+            f"Email recebido de: {from_name}\n"
+            f"Assunto: {subject}\n"
+            f"Corpo (primeiros {_MAX_BODY_CHARS} chars):\n{body}\n\n"
+            f"---\n\n"
+            f"Ditado do utilizador (transcrição):\n{transcript}\n\n"
+            f"Gera a resposta em PT-PT."
+        )
 
-    polished_text: str = response.choices[0].message.content or ""
+        t0 = time.monotonic()
+        response = retry_with_backoff(
+            client.chat.completions.create,
+            model=settings.GROQ_LLM_MODEL,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.5,
+            max_tokens=500,
+        )
+        model_ms = int((time.monotonic() - t0) * 1000)
+
+        polished_text: str = response.choices[0].message.content or ""
+    except Exception:
+        if _emit:
+            telemetry.emit_phase(
+                session_id,  # type: ignore[arg-type]
+                user_id,  # type: ignore[arg-type]
+                "llm_done",
+                int((time.monotonic() - t_phase) * 1000),
+                "error",
+            )
+        raise
 
     # NOTA: nunca logar `transcript`, `context.body` nem `polished_text`
     # (todos PII — LOGGING-POLICY §4). Apenas métricas numéricas.
@@ -114,6 +140,15 @@ def polish_draft(transcript: str, context: dict[str, str]) -> dict[str, Any]:
         transcript_len=len(transcript),
         output_len=len(polished_text),
     )
+
+    if _emit:
+        telemetry.emit_phase(
+            session_id,  # type: ignore[arg-type]
+            user_id,  # type: ignore[arg-type]
+            "llm_done",
+            int((time.monotonic() - t_phase) * 1000),
+            "ok",
+        )
 
     return {"polished_text": polished_text, "model_ms": model_ms}
 
@@ -146,6 +181,9 @@ EXEMPLOS MAUS (NUNCA fazer):
 def chat_response(
     transcript: str,
     history: list[dict[str, str]] | None = None,
+    *,
+    session_id: UUID | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """Resposta conversacional inteligente do Vox via Groq Llama 3.3 70B.
 
@@ -155,36 +193,54 @@ def chat_response(
     Args:
         transcript: o que o utilizador disse.
         history: lista de mensagens anteriores [{role, content}] para contexto.
+        session_id: optional voice session UUID for phase telemetry.
+        user_id: optional authenticated user UUID for phase telemetry.
 
     Returns:
         dict com chaves:
             - `response_text` (str): resposta do Vox pronta para TTS.
             - `model_ms` (int): latência em milissegundos.
     """
-    settings = get_settings()
-    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
+    _emit = session_id is not None and user_id is not None
+    t_phase = time.monotonic()
+    if _emit:
+        telemetry.emit_phase(session_id, user_id, "llm_start", 0, "ok")  # type: ignore[arg-type]
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": _CHAT_SYSTEM_PROMPT}]
+    try:
+        settings = get_settings()
+        client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
 
-    if history:
-        # Incluir apenas últimas 6 trocas para não exceder context window
-        for msg in history[-12:]:
-            if msg.get("role") in ("user", "assistant") and msg.get("content"):
-                messages.append({"role": msg["role"], "content": msg["content"][:500]})
+        messages: list[dict[str, str]] = [{"role": "system", "content": _CHAT_SYSTEM_PROMPT}]
 
-    messages.append({"role": "user", "content": transcript})
+        if history:
+            # Incluir apenas últimas 6 trocas para não exceder context window
+            for msg in history[-12:]:
+                if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                    messages.append({"role": msg["role"], "content": msg["content"][:500]})
 
-    t0 = time.monotonic()
-    response = retry_with_backoff(
-        client.chat.completions.create,
-        model=settings.GROQ_LLM_MODEL,
-        messages=messages,
-        temperature=0.6,
-        max_tokens=120,  # ~2 frases máximo — força concisão
-    )
-    model_ms = int((time.monotonic() - t0) * 1000)
+        messages.append({"role": "user", "content": transcript})
 
-    response_text: str = response.choices[0].message.content or "Desculpa, não consegui processar o pedido."
+        t0 = time.monotonic()
+        response = retry_with_backoff(
+            client.chat.completions.create,
+            model=settings.GROQ_LLM_MODEL,
+            messages=messages,
+            temperature=0.6,
+            max_tokens=120,  # ~2 frases máximo — força concisão
+        )
+        model_ms = int((time.monotonic() - t0) * 1000)
+
+        response_text: str = response.choices[0].message.content or "Desculpa, não consegui processar o pedido."
+    except Exception:
+        if _emit:
+            telemetry.emit_phase(
+                session_id,  # type: ignore[arg-type]
+                user_id,  # type: ignore[arg-type]
+                "llm_done",
+                int((time.monotonic() - t_phase) * 1000),
+                "error",
+            )
+        raise
 
     logger.info(
         "voice_llm.chat.ok",
@@ -192,5 +248,14 @@ def chat_response(
         transcript_len=len(transcript),
         output_len=len(response_text),
     )
+
+    if _emit:
+        telemetry.emit_phase(
+            session_id,  # type: ignore[arg-type]
+            user_id,  # type: ignore[arg-type]
+            "llm_done",
+            int((time.monotonic() - t_phase) * 1000),
+            "ok",
+        )
 
     return {"response_text": response_text, "model_ms": model_ms}

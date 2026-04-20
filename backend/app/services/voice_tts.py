@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from uuid import UUID
 
 from elevenlabs.client import ElevenLabs
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.services import telemetry
 from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
@@ -32,7 +34,13 @@ MAX_TEXT_CHARS = 5000  # SPEC §3 / RF-V.3 — limite duro de input
 _HTTP_TIMEOUT = 30.0
 
 
-def synthesize(text: str, voice_id: str | None = None) -> dict[str, Any]:
+def synthesize(
+    text: str,
+    voice_id: str | None = None,
+    *,
+    session_id: UUID | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     """Gera MP3 via ElevenLabs streaming e concatena chunks para bytes.
 
     Args:
@@ -58,18 +66,34 @@ def synthesize(text: str, voice_id: str | None = None) -> dict[str, Any]:
     if not effective_voice_id:
         raise ValueError("voice_id required but not provided or configured")
 
-    client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY, timeout=_HTTP_TIMEOUT)
+    _emit = session_id is not None and user_id is not None
+    t_phase = time.monotonic()
+    if _emit:
+        telemetry.emit_phase(session_id, user_id, "tts_start", 0, "ok")  # type: ignore[arg-type]
 
-    t0 = time.monotonic()
-    stream = retry_with_backoff(
-        client.text_to_speech.convert,
-        voice_id=effective_voice_id,
-        model_id=settings.ELEVENLABS_MODEL_ID,
-        text=text,
-        output_format="mp3_44100_128",
-    )
-    audio_bytes = b"".join(stream)
-    tts_ms = int((time.monotonic() - t0) * 1000)
+    try:
+        client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY, timeout=_HTTP_TIMEOUT)
+
+        t0 = time.monotonic()
+        stream = retry_with_backoff(
+            client.text_to_speech.convert,
+            voice_id=effective_voice_id,
+            model_id=settings.ELEVENLABS_MODEL_ID,
+            text=text,
+            output_format="mp3_44100_128",
+        )
+        audio_bytes = b"".join(stream)
+        tts_ms = int((time.monotonic() - t0) * 1000)
+    except Exception:
+        if _emit:
+            telemetry.emit_phase(
+                session_id,  # type: ignore[arg-type]
+                user_id,  # type: ignore[arg-type]
+                "tts_done",
+                int((time.monotonic() - t_phase) * 1000),
+                "error",
+            )
+        raise
 
     # NOTA: nunca logar `text` nem `audio_bytes` (PII — LOGGING-POLICY §4).
     # Apenas métricas numéricas.
@@ -79,5 +103,14 @@ def synthesize(text: str, voice_id: str | None = None) -> dict[str, Any]:
         bytes_len=len(audio_bytes),
         tts_ms=tts_ms,
     )
+
+    if _emit:
+        telemetry.emit_phase(
+            session_id,  # type: ignore[arg-type]
+            user_id,  # type: ignore[arg-type]
+            "tts_done",
+            int((time.monotonic() - t_phase) * 1000),
+            "ok",
+        )
 
     return {"audio_bytes": audio_bytes, "mime": "audio/mpeg", "tts_ms": tts_ms}
