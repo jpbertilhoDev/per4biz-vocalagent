@@ -1,4 +1,5 @@
 import { apiFetch, getAuthToken } from "./api";
+import type { VoiceTelemetry } from "./voice-telemetry";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -7,21 +8,31 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function telemetryHeaders(telemetry?: VoiceTelemetry): HeadersInit {
+  const id = telemetry?.id;
+  return id ? { "X-Voice-Session-Id": id } : {};
+}
+
 export interface TranscribeResponse {
   text: string;
   language: string | null;
   duration_ms: number;
 }
 
-export async function postTranscribe(blob: Blob): Promise<TranscribeResponse> {
+export async function postTranscribe(
+  blob: Blob,
+  telemetry?: VoiceTelemetry,
+): Promise<TranscribeResponse> {
   const formData = new FormData();
   formData.append("audio", blob, "recording.webm");
+  telemetry?.mark("upload_start");
   const res = await fetch(`${API_URL}/voice/transcribe`, {
     method: "POST",
     credentials: "include",
-    headers: { ...authHeaders() },
+    headers: { ...authHeaders(), ...telemetryHeaders(telemetry) },
     body: formData,
   });
+  telemetry?.mark("upload_done");
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined") {
       window.location.href = "/";
@@ -51,20 +62,35 @@ export interface PolishResponse {
   model_ms: number;
 }
 
-export async function postPolish(ctx: PolishContext): Promise<PolishResponse> {
-  return apiFetch<PolishResponse>("/voice/polish", {
+export async function postPolish(
+  ctx: PolishContext,
+  telemetry?: VoiceTelemetry,
+): Promise<PolishResponse> {
+  const result = await apiFetch<PolishResponse>("/voice/polish", {
     method: "POST",
     body: JSON.stringify(ctx),
+    headers: { ...telemetryHeaders(telemetry) },
   });
+  telemetry?.mark("polish_done");
+  return result;
 }
 
-export async function fetchTTS(text: string, voiceId?: string): Promise<Blob> {
+export async function fetchTTS(
+  text: string,
+  voiceId?: string,
+  telemetry?: VoiceTelemetry,
+): Promise<Blob> {
   const res = await fetch(`${API_URL}/voice/tts`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...telemetryHeaders(telemetry),
+    },
     body: JSON.stringify({ text, voice_id: voiceId ?? null }),
   });
+  telemetry?.mark("tts_done");
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined") {
       window.location.href = "/";
@@ -96,11 +122,15 @@ export interface IntentResponse {
 export async function postIntent(
   transcript: string,
   history: ChatHistoryMessage[] = [],
+  telemetry?: VoiceTelemetry,
 ): Promise<IntentResponse> {
-  return apiFetch<IntentResponse>("/voice/intent", {
+  const result = await apiFetch<IntentResponse>("/voice/intent", {
     method: "POST",
     body: JSON.stringify({ transcript, history }),
+    headers: { ...telemetryHeaders(telemetry) },
   });
+  telemetry?.mark("intent_done");
+  return result;
 }
 
 export interface ChatResponse {
@@ -116,9 +146,13 @@ export interface ChatHistoryMessage {
 export async function postChat(
   transcript: string,
   history: ChatHistoryMessage[] = [],
+  telemetry?: VoiceTelemetry,
 ): Promise<ChatResponse> {
-  return apiFetch<ChatResponse>("/voice/chat", {
+  const result = await apiFetch<ChatResponse>("/voice/chat", {
     method: "POST",
     body: JSON.stringify({ transcript, history }),
+    headers: { ...telemetryHeaders(telemetry) },
   });
+  telemetry?.mark("chat_done");
+  return result;
 }

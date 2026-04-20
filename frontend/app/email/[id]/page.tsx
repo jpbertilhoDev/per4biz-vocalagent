@@ -10,6 +10,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { Button } from "@/components/ui/button";
 import { RecordModal } from "@/components/record-modal";
 import { fetchTTS, postPolish, postTranscribe } from "@/lib/voice-api";
+import type { VoiceTelemetry } from "@/lib/voice-telemetry";
 
 type ProcessingState = "idle" | "tts" | "transcribe" | "polish";
 
@@ -91,12 +92,12 @@ export default function EmailDetailPage() {
     }
   };
 
-  const handleRecorded = async (blob: Blob) => {
+  const handleRecorded = async (blob: Blob, telemetry: VoiceTelemetry) => {
     if (!data) return;
     setVoiceError(null);
     try {
       setProcessing("transcribe");
-      const transcribed = await postTranscribe(blob);
+      const transcribed = await postTranscribe(blob, telemetry);
       setProcessing("polish");
       const polished = await postPolish({
         transcript: transcribed.text,
@@ -104,7 +105,7 @@ export default function EmailDetailPage() {
         from_email: data.from_email,
         subject: data.subject,
         body: data.body_text,
-      });
+      }, telemetry);
       const text = encodeURIComponent(polished.polished_text);
       const to = encodeURIComponent(data.from_email);
       const subject = encodeURIComponent(`Re: ${data.subject}`);
@@ -116,6 +117,7 @@ export default function EmailDetailPage() {
       setVoiceError("Não foi possível processar a gravação.");
     } finally {
       setProcessing("idle");
+      void telemetry.flush();
     }
   };
 

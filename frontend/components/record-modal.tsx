@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Mic, MicOff, Square } from "lucide-react";
 import {
   Dialog,
@@ -11,30 +11,36 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useMediaRecorder } from "@/lib/use-media-recorder";
+import { VoiceTelemetry } from "@/lib/voice-telemetry";
 
 export interface RecordModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRecorded: (blob: Blob) => void;
+  onRecorded: (blob: Blob, telemetry: VoiceTelemetry) => void;
 }
 
 export function RecordModal({ open, onOpenChange, onRecorded }: RecordModalProps) {
   const { state, audioBlob, duration, error, start, stop, reset } = useMediaRecorder();
+  const telemetryRef = useRef<VoiceTelemetry>(new VoiceTelemetry());
 
-  // Auto-start quando abre
+  // Auto-start quando abre — a telemetria arranca com o modal e é flushed
+  // quando o modal fecha (qualquer evento bufferizado segue para o backend).
   useEffect(() => {
     if (open && state === "idle") {
+      telemetryRef.current.start();
       void start();
     }
     if (!open) {
+      void telemetryRef.current.flush();
       reset();
     }
   }, [open, state, start, reset]);
 
-  // Quando ready, chama callback
+  // Quando ready, marca vad_cut e propaga telemetria ao caller
   useEffect(() => {
     if (state === "ready" && audioBlob) {
-      onRecorded(audioBlob);
+      telemetryRef.current.mark("vad_cut");
+      onRecorded(audioBlob, telemetryRef.current);
       onOpenChange(false);
     }
   }, [state, audioBlob, onRecorded, onOpenChange]);

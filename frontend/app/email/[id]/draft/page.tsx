@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RecordModal } from "@/components/record-modal";
 import { apiFetch } from "@/lib/api";
 import { postTranscribe, postPolish } from "@/lib/voice-api";
+import type { VoiceTelemetry } from "@/lib/voice-telemetry";
 
 export default function DraftPage() {
   const router = useRouter();
@@ -44,23 +45,24 @@ export default function DraftPage() {
     }
   };
 
-  const handleReRecorded = async (blob: Blob) => {
+  const handleReRecorded = async (blob: Blob, telemetry: VoiceTelemetry) => {
     setReDictating(true);
     setError(null);
     try {
-      const transcribed = await postTranscribe(blob);
+      const transcribed = await postTranscribe(blob, telemetry);
       const polished = await postPolish({
         transcript: transcribed.text,
         from_name: "",
         from_email: to,
         subject,
         body: initialText,
-      });
+      }, telemetry);
       setBody(polished.polished_text);
     } catch {
       setError("Não foi possível processar a gravação.");
     } finally {
       setReDictating(false);
+      void telemetry.flush();
     }
   };
 
