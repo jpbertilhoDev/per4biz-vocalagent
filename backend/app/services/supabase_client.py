@@ -22,3 +22,8 @@ def get_supabase_admin() -> Client:
     """
     settings = get_settings()
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
+
+# Alias exposto para consumidores E10+ que usam nome genérico (telemetry, etc).
+# Em V1 single-tenant ambos apontam para o mesmo service_role client.
+get_supabase_client = get_supabase_admin
