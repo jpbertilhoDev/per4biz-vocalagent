@@ -141,6 +141,44 @@ Três candidatas com design pronto. Ordem real sai dos dados da Fase 1. Expectat
 **Risco:** 8B pode classificar mal. Mitigação: extender harness de 20 → 50+ casos PT-PT. Gate de merge = ≥95% accuracy. Se confidence < 0.7, fallback para 70B como classificador.
 **Ficheiros:** `backend/app/services/voice_intent.py`, `backend/app/services/voice_llm.py`, `backend/app/services/voice_templates.py` (novo), `backend/tests/voice/test_intent_accuracy.py`.
 
+### Candidata B.1 — Groq native tool calling (sub-item de B)
+
+**Problema:** `voice_intent.py` hoje usa prompt-parsing custom (instruções no system prompt + `json.loads()` sobre resposta text do LLM). Frágil (falha ~5% dos casos com JSON malformado), verboso, adiciona latência de parsing/retry.
+
+**Solução:** substituir prompt-parsing por tool calling nativo do Groq (`tools=[...]` no SDK). Cada intent vira uma function com JSON schema estruturado:
+
+```python
+tools = [
+    {"type": "function", "function": {
+        "name": "delete_email",
+        "parameters": {"type": "object", "properties": {
+            "email_id": {"type": "string"},
+            "sender_match": {"type": "string"}
+        }, "required": []}
+    }},
+    {"type": "function", "function": {
+        "name": "create_event",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string"},
+            "datetime_iso": {"type": "string", "format": "date-time"},
+            "duration_min": {"type": "integer"}
+        }, "required": ["title", "datetime_iso"]}
+    }},
+    # ... restantes intents determinísticas (list_emails, cancel, reminder)
+    #     + generativas (chat, summarize, compose_reply) como tools
+]
+```
+
+Llama 3.1 8B devolve `tool_calls=[{name, arguments}]` estruturado pelo runtime Groq. Sem regex, sem `json.loads()` defensivo, sem retries por JSON partido.
+
+**Fallback:** se `tool_calls` vazio → tratar como intent `chat` (rota generativa, Llama 70B).
+
+**Relação com B:** B.1 implementa-se dentro do mesmo refactor de B — zero trabalho duplicado. Apenas troca *como* o 8B classifica; o pipeline det/gen de B fica igual.
+
+**Ganho estimado (adicional a B):** —50 a —100ms (eliminação do parsing custom + retries); accuracy +2–5% (runtime garante JSON válido).
+**Risco:** baixo. Groq suporta tool calling em Llama 3+ desde 2024-07, produção estável.
+**Ficheiros:** `backend/app/services/voice_intent.py`, `backend/app/services/voice_tools.py` (novo — schema das tools), `backend/tests/voice/test_intent_tool_calling.py`.
+
 ### Candidata C — Streaming LLM → ElevenLabs
 
 **Problema:** esperamos frase inteira do LLM antes de chamar TTS.
@@ -183,6 +221,7 @@ Duas paths distintas após candidata B:
 ### Unit
 
 - `voice_intent.py`: harness 50 casos PT-PT, devolve intent+slots esperados. Categorias: apagar, responder, agendar, lembretes, listar, chit-chat, ambíguos, out-of-scope.
+- `test_intent_tool_calling.py` (B.1): 20 casos PT-PT focados em arguments dos tool_calls — assert `tool_calls[0].name` e `arguments` correctos; verifica fallback para `chat` quando `tool_calls` vazio.
 - `voice_tts.py`: mock ElevenLabs, verifica streaming arranca após N tokens, fallback activa em erro.
 - `vad.ts`: 10 clips áudio fixture (silêncio, fala+pausa, ruído, fala contínua, sotaque PT-PT rápido/lento) → cut point esperado ±100ms.
 - `voice_templates.py`: cada template renderiza com slots válidos; assert zero placeholders `{x}` no output.
@@ -235,6 +274,7 @@ Cada candidata merge-a atrás da sua flag. Rollback = flip da env var no Fly.io,
 
 - `@ricky0123/vad-web` (frontend, ~1MB WASM) — adicionar a `frontend/package.json`.
 - Groq já expõe Llama 3.1 8B Instant — sem nova dependência backend.
+- Groq SDK `groq` (já instalado) suporta native tool calling (`tools=[...]`) em Llama 3+ — B.1 sem nova dependência.
 - ElevenLabs SDK já instalado, WebSocket streaming API disponível — sem upgrade.
 - Supabase migration nova: `voice_latency_events` + índices + cron de cleanup 30d.
 
