@@ -4,7 +4,8 @@ export interface TelemetryEvent {
   status?: "ok" | "error" | "timeout";
 }
 
-const TELEMETRY_ENDPOINT = "/api/voice/telemetry";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const TELEMETRY_ENDPOINT = `${API_URL}/voice/telemetry`;
 
 export class VoiceTelemetry {
   private sessionId: string | null = null;
@@ -39,11 +40,15 @@ export class VoiceTelemetry {
     const sessionId = this.sessionId;
     this.buffer = [];
     try {
+      const { getAuthToken } = await import("./api");
+      const token = getAuthToken();
       await fetch(TELEMETRY_ENDPOINT, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           "X-Voice-Session-Id": sessionId,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
         keepalive: true,
