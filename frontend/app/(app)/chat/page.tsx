@@ -188,19 +188,38 @@ export default function ChatPage() {
         restoreAudio();
       };
       audio.onerror = () => {
-        console.warn("[Vox] ElevenLabs audio playback error");
+        // Suprime false-positives: MediaError code 1 (ABORTED por GC/replacement)
+        // e erros que disparam DEPOIS do playback já ter começado ou terminado.
+        const code = audio.error?.code;
+        const spurious = code === 1 || audio.currentTime > 0 || audio.ended;
         setMicState("idle");
         URL.revokeObjectURL(url);
         audioUrlRef.current = null;
         restoreAudio();
-        addVoxCard({
-          type: "error",
-          title: "Voz indisponível",
-          content: "Falha ao reproduzir áudio do ElevenLabs.",
-        });
+        if (!spurious) {
+          console.warn("[Vox] ElevenLabs audio playback error", { code, error: audio.error });
+          addVoxCard({
+            type: "error",
+            title: "Voz indisponível",
+            content: "Falha ao reproduzir áudio do ElevenLabs.",
+          });
+        }
       };
       await audio.play();
     } catch (err) {
+      // iOS Safari rejeita a Promise de play() com NotAllowedError/AbortError
+      // mesmo quando o áudio toca (autoplay policy race com gesture anterior).
+      // Se o audio element já iniciou playback, suprime o card de erro.
+      const isSpuriousPlayRejection =
+        err instanceof DOMException &&
+        (err.name === "NotAllowedError" || err.name === "AbortError") &&
+        audioRef.current != null &&
+        (!audioRef.current.paused || audioRef.current.currentTime > 0);
+      if (isSpuriousPlayRejection) {
+        console.warn("[Vox] play() rejected but audio is playing — supressing error card:", err);
+        // Deixa o audio.onended tratar do cleanup; não mexemos em micState aqui.
+        return;
+      }
       console.warn("[Vox] ElevenLabs TTS failed:", err);
       restoreAudio();
       addVoxCard({
