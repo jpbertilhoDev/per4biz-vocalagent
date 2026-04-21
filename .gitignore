@@ -75,5 +75,3 @@ pip-log.txt
 
 # === Worktrees (Superpowers cria fora mas por garantia) ===
 ../per4biz-trees/
-.worktrees/
-.claude/worktrees/

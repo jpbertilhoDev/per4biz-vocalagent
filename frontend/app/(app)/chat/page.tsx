@@ -34,7 +34,6 @@ import {
   type UpdateEventPayload,
 } from "@/lib/queries";
 import { apiFetch, ApiError } from "@/lib/api";
-import { VoiceTelemetry } from "@/lib/voice-telemetry";
 import { cn } from "@/lib/utils";
 
 function useVoxRecorder() {
@@ -78,10 +77,6 @@ export default function ChatPage() {
   const [welcomeSent, setWelcomeSent] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
-  // Active voice-session telemetry. Created on mic tap, flushed after TTS
-  // finishes (or on error). Threaded through every backend call so the
-  // server sees X-Voice-Session-Id on transcribe/intent/chat/polish/tts.
-  const telemetryRef = useRef<VoiceTelemetry | null>(null);
   const lastEmailRef = useRef<{ fromName: string; fromEmail: string; subject: string; body: string; id: string } | null>(null);
   // pendingReplyRef tracks "we are actively awaiting the user's reply dictation".
   // Different from lastEmailRef which is "most recently discussed email".
@@ -176,19 +171,8 @@ export default function ChatPage() {
     const restoreAudio = mutePageAudio();
     setMicState("speaking");
 
-    // Snapshot the active session so async callbacks below still see it
-    // even if a new session takes the ref slot mid-playback.
-    const telemetry = telemetryRef.current;
-
-    const finishSession = (): void => {
-      if (telemetry && telemetryRef.current === telemetry) {
-        telemetryRef.current = null;
-      }
-      void telemetry?.flush();
-    };
-
     try {
-      const blob = await fetchTTS(text.slice(0, 4000), undefined, telemetry ?? undefined);
+      const blob = await fetchTTS(text.slice(0, 4000));
       if (blob.size < 100) {
         throw new Error(`TTS returned suspiciously small audio: ${blob.size} bytes`);
       }
@@ -197,19 +181,11 @@ export default function ChatPage() {
       const audio = new Audio(url);
       audio.dataset.vox = "true"; // mark as Vox audio so mutePageAudio skips it
       audioRef.current = audio;
-      let firstPlayMarked = false;
-      audio.onplaying = () => {
-        if (!firstPlayMarked) {
-          telemetry?.mark("audio_first_play");
-          firstPlayMarked = true;
-        }
-      };
       audio.onended = () => {
         setMicState("idle");
         URL.revokeObjectURL(url);
         audioUrlRef.current = null;
         restoreAudio();
-        finishSession();
       };
       audio.onerror = () => {
         console.warn("[Vox] ElevenLabs audio playback error");
@@ -222,8 +198,6 @@ export default function ChatPage() {
           title: "Voz indisponível",
           content: "Falha ao reproduzir áudio do ElevenLabs.",
         });
-        telemetry?.mark("audio_first_play", "error");
-        finishSession();
       };
       await audio.play();
     } catch (err) {
@@ -235,8 +209,6 @@ export default function ChatPage() {
         content: "ElevenLabs não respondeu. Verifica a ligação ou a chave da API.",
       });
       setMicState("idle");
-      telemetry?.mark("tts_done", "error");
-      finishSession();
     }
   }, [setMicState, addVoxCard, mutePageAudio]);
 
@@ -361,7 +333,7 @@ export default function ChatPage() {
           subject: context.subject,
           body: context.body,
         };
-        const polished = await postPolish(polishContext, telemetryRef.current ?? undefined);
+        const polished = await postPolish(polishContext);
 
         addVoxCard({
           type: "draft",
@@ -402,7 +374,7 @@ export default function ChatPage() {
     const history = buildHistoryFromMessages(messages);
 
     try {
-      const result = await postIntent(transcript, history, telemetryRef.current ?? undefined);
+      const result = await postIntent(transcript, history);
       intentResult = { intent: result.intent, params: result.params };
     } catch {
       intentResult = { intent: "general", params: {} };
@@ -773,7 +745,7 @@ export default function ChatPage() {
         // Build conversation history for context (last 10 messages)
         const history = buildHistoryFromMessages(messages);
 
-        const chatResult = await postChat(transcript, history, telemetryRef.current ?? undefined);
+        const chatResult = await postChat(transcript, history);
         addVoxCard({
           type: "transcription",
           title: "Vox",
@@ -794,13 +766,6 @@ export default function ChatPage() {
 
   const handleMicClick = useCallback(() => {
     if (micState === "idle") {
-      // New voice session — flush any stale telemetry first (defensive)
-      if (telemetryRef.current) {
-        void telemetryRef.current.flush();
-      }
-      const t = new VoiceTelemetry();
-      t.start();
-      telemetryRef.current = t;
       recorder.start(2000);
       setMicState("listening");
     } else if (micState === "listening" || micState === "silence-detected") {
@@ -816,11 +781,7 @@ export default function ChatPage() {
 
     setMicState("processing");
 
-    // Mark the VAD cut on the active telemetry session (if any) before
-    // the upload kicks off, so upload_start/upload_done bracket the POST.
-    telemetryRef.current?.mark("vad_cut");
-
-    postTranscribe(recorder.audioBlob, telemetryRef.current ?? undefined)
+    postTranscribe(recorder.audioBlob)
       .then(async (result) => {
         const transcribedText = result.text;
         addUserMessage(transcribedText, true);
@@ -858,13 +819,6 @@ export default function ChatPage() {
       })
       .catch(() => {
         addVoxCard({ type: "error", title: "Erro ao processar", content: "Não foi possível processar a gravação. Tenta de novo.", actions: [{ label: "Tentar de novo", action: "retry" }] });
-        // Flush on error path — playTTS won't be called here, so the session
-        // would otherwise leak events on the client buffer.
-        if (telemetryRef.current) {
-          telemetryRef.current.mark("upload_done", "error");
-          void telemetryRef.current.flush();
-          telemetryRef.current = null;
-        }
       })
       .finally(() => {
         setMicState("idle");
@@ -901,7 +855,6 @@ export default function ChatPage() {
             const result = await postChat(
               `Resume este email em 1-2 frases curtas, como um secretário executivo. Não leias verbatim, captura só o essencial.\n\nDe: ${detail.from_name ?? detail.from_email}\nAssunto: ${detail.subject}\nCorpo:\n${detail.body_text.slice(0, 3000)}`,
               [],
-              telemetryRef.current ?? undefined,
             );
             addVoxCard({
               type: "email-read",

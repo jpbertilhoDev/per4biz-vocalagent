@@ -9,13 +9,11 @@ from __future__ import annotations
 import json
 import time
 from typing import Any
-from uuid import UUID
 
 from groq import Groq
 
 from app.config import get_settings
 from app.logging import get_logger
-from app.services import telemetry
 from app.services.retry import retry_with_backoff
 
 logger = get_logger(__name__)
@@ -141,74 +139,53 @@ def _build_intent_prompt() -> str:
 def classify_intent(
     transcript: str,
     history: list[dict[str, str]] | None = None,
-    *,
-    session_id: UUID | None = None,
-    user_id: str | None = None,
 ) -> dict[str, Any]:
     """Classify user intent from voice transcript.
 
     Args:
         transcript: what the user said.
         history: prior conversation messages [{role, content}] for context.
-        session_id: optional voice session UUID for phase telemetry.
-        user_id: optional authenticated user UUID for phase telemetry.
 
     Returns:
         dict with keys: intent (str), params (dict), model_ms (int)
     """
-    _emit = session_id is not None and user_id is not None
-    t_phase = time.monotonic()
-    if _emit:
-        telemetry.emit_phase(session_id, user_id, "intent_start", 0, "ok")  # type: ignore[arg-type]
+    settings = get_settings()
+    client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": _build_intent_prompt()},
+    ]
+
+    # Include last 6 turns for multi-turn reference resolution
+    if history:
+        for msg in history[-12:]:
+            if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"][:300]})
+
+    messages.append({"role": "user", "content": transcript})
+
+    t0 = time.monotonic()
+    response = retry_with_backoff(
+        client.chat.completions.create,
+        model=settings.GROQ_LLM_MODEL,
+        messages=messages,
+        temperature=0.1,
+        max_tokens=300,
+    )
+    model_ms = int((time.monotonic() - t0) * 1000)
+
+    raw: str = response.choices[0].message.content or ""
 
     try:
-        settings = get_settings()
-        client = Groq(api_key=settings.GROQ_API_KEY, timeout=_HTTP_TIMEOUT)
-
-        messages: list[dict[str, str]] = [
-            {"role": "system", "content": _build_intent_prompt()},
-        ]
-
-        # Include last 6 turns for multi-turn reference resolution
-        if history:
-            for msg in history[-12:]:
-                if msg.get("role") in ("user", "assistant") and msg.get("content"):
-                    messages.append({"role": msg["role"], "content": msg["content"][:300]})
-
-        messages.append({"role": "user", "content": transcript})
-
-        t0 = time.monotonic()
-        response = retry_with_backoff(
-            client.chat.completions.create,
-            model=settings.GROQ_LLM_MODEL,
-            messages=messages,
-            temperature=0.1,
-            max_tokens=300,
-        )
-        model_ms = int((time.monotonic() - t0) * 1000)
-
-        raw: str = response.choices[0].message.content or ""
-
-        try:
-            cleaned = raw.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            parsed = json.loads(cleaned)
-            intent = parsed.get("intent", "general")
-            params = parsed.get("params", {})
-        except (json.JSONDecodeError, KeyError):
-            intent = "general"
-            params = {"text": transcript}
-    except Exception:
-        if _emit:
-            telemetry.emit_phase(
-                session_id,  # type: ignore[arg-type]
-                user_id,  # type: ignore[arg-type]
-                "intent_done",
-                int((time.monotonic() - t_phase) * 1000),
-                "error",
-            )
-        raise
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(cleaned)
+        intent = parsed.get("intent", "general")
+        params = parsed.get("params", {})
+    except (json.JSONDecodeError, KeyError):
+        intent = "general"
+        params = {"text": transcript}
 
     logger.info(
         "voice_llm.classify.ok",
@@ -216,14 +193,5 @@ def classify_intent(
         model_ms=model_ms,
         transcript_len=len(transcript),
     )
-
-    if _emit:
-        telemetry.emit_phase(
-            session_id,  # type: ignore[arg-type]
-            user_id,  # type: ignore[arg-type]
-            "intent_done",
-            int((time.monotonic() - t_phase) * 1000),
-            "ok",
-        )
 
     return {"intent": intent, "params": params, "model_ms": model_ms}
